@@ -37,6 +37,7 @@ export interface OrderItem {
   kodeBarang: string;
   tanggalOrder: string;
   tanggalTargetSelesai: string;
+  completedAt?: string | null;
   cs: string;
   konsumen: string;
   jumlahPesanan: number;
@@ -48,7 +49,10 @@ export interface OrderItem {
   status: JobStatus;
   priority: Priority;
   deskripsiPekerjaan: string;
+  embroideryStatus?: 'Lengkap' | 'Kurang';
+  embroideryNotes?: string;
   createdAt: string;
+  deletedAt?: string | null;
   isManual?: boolean;
 }
 

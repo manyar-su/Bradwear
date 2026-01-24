@@ -16,33 +16,31 @@ export const extractOrderData = async (base64Image: string) => {
             }
           },
           {
-            text: `Extract data for Bradwear Indonesia. 
-            Rules:
-            - Find 'kodeBarang' (top right number).
-            - Sizes table: extract size, quantity, gender (Pria/Wanita), and arm length (Panjang/Pendek).
-            - Identify 'model' from: Brad V1, Brad V2, PDH, Ventura, Rompi.
+            text: `Extract production data from this Bradwear recruitment/order slip image.
+            Focus on accuracy for all fields.
             
-            Return JSON:
-            {
-              "namaPenjahit": "string",
-              "kodeBarang": "string",
-              "tanggalOrder": "YYYY-MM-DD",
-              "tanggalTargetSelesai": "YYYY-MM-DD",
-              "cs": "string",
-              "konsumen": "string",
-              "jumlahPesanan": number,
-              "sizeDetails": [{"size": "S/M/L", "jumlah": 1, "gender": "Pria/Wanita", "tangan": "Panjang/Pendek"}],
-              "model": "Brad V1/V2/etc",
-              "warna": "string",
-              "sakuType": "Polos/Skotlait/Peterban",
-              "sakuColor": "Abu/Hitam/etc",
-              "deskripsiPekerjaan": "full text"
-            }`
+            Fields needed:
+            - namaPenjahit: Name of the person sewing.
+            - kodeBarang: The order ID or product code (often a 4-digit number).
+            - tanggalOrder: The date the order was made.
+            - tanggalTargetSelesai: The deadline or target date.
+            - cs: Customer Service name.
+            - konsumen: The client or customer name.
+            - jumlahPesanan: Total pieces.
+            - sizeDetails: A list of items containing: size, count (jumlah), gender (Pria/Wanita), and arm type (Panjang/Pendek).
+            - model: The product model name.
+            - warna: Product color.
+            - sakuType: Type of pocket (Polos/Skotlait/Peterban).
+            - sakuColor: Pocket color (Abu/Hitam/etc).
+            - deskripsiPekerjaan: All other relevant notes found on the paper.
+
+            Important: Return ONLY a valid JSON object matching the schema. Do not include markdown formatting or extra text.`
           }
         ]
       },
       config: {
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -93,24 +91,32 @@ export const extractSplitData = async (base64Images: string[]) => {
       contents: {
         parts: [
           ...parts,
-          { text: "Extract metadata (kodeBarang, model, tangan) and aggregate size counts. Return JSON object." }
+          { text: "Extract metadata and size counts from all provided images. If multiple images are provided, treat them as separate orders. Return JSON with an 'orders' array." }
         ]
       },
       config: {
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            kodeBarang: { type: Type.STRING },
-            model: { type: Type.STRING },
-            tangan: { type: Type.STRING },
-            sizeCounts: {
+            orders: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  size: { type: Type.STRING },
-                  jumlah: { type: Type.NUMBER }
+                  kodeBarang: { type: Type.STRING },
+                  model: { type: Type.STRING },
+                  sizeCounts: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        size: { type: Type.STRING },
+                        jumlah: { type: Type.NUMBER }
+                      }
+                    }
+                  }
                 }
               }
             }

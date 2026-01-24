@@ -1,6 +1,11 @@
 {
-  "name": "BradwearFlow",
-  "description": "A modern fintech-style application for tailors to track orders, scan work details using AI, and manage productivity with analytics.",
+  "name": "BradFlow",
+  "short_name": "BradwearFlow",
+  "description": "aplikasi mobile untuk mempermudah saat pecatatan kerjaan agar lebih efisien.",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#10b981",
+  "background_color": "#f8fafc",
   "requestFramePermissions": [
     "camera"
   ]

@@ -1,7 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { OrderItem, PRICE_LIST, JobStatus } from '../types';
-// Fix: Removed startOfWeek and unused eachDayOfInterval from date-fns import due to export errors
 import { format, isSameDay, isSameMonth, addDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { Wallet, TrendingUp, Package } from 'lucide-react';
@@ -10,6 +10,10 @@ interface AnalyticsScreenProps {
   orders: OrderItem[];
   isDarkMode: boolean;
 }
+
+const isValidDate = (date: any): date is Date => {
+  return date instanceof Date && !isNaN(date.getTime());
+};
 
 const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode }) => {
   const [timeframe, setTimeframe] = useState<'WEEK' | 'MONTH' | 'YEAR'>('WEEK');
@@ -28,10 +32,8 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
   const chartData = useMemo(() => {
     const now = new Date();
     if (timeframe === 'WEEK') {
-      // Fix: Manual Monday calculation instead of startOfWeek (locale ID starts week on Monday)
       const monday = new Date(now);
       const day = monday.getDay();
-      // Adjust to Monday: if Sunday (0), go back 6; otherwise go back (day - 1)
       const diff = monday.getDate() - (day === 0 ? 6 : day - 1);
       monday.setDate(diff);
       monday.setHours(0, 0, 0, 0);
@@ -42,17 +44,22 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
         const date = addDays(monday, offset);
         return {
           label: dayLabels[offset],
-          count: orders.filter(o => isSameDay(new Date(o.createdAt), date)).length
+          count: orders.filter(o => {
+            const d = new Date(o.createdAt);
+            return isValidDate(d) && isSameDay(d, date);
+          }).length
         };
       });
     } else {
-      // For MONTH/YEAR we show last 6 months
       return [5, 4, 3, 2, 1, 0].reverse().map(i => {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
         return {
           label: format(date, 'MMM', { locale: idLocale }),
-          count: orders.filter(o => isSameMonth(new Date(o.createdAt), date)).length
+          count: orders.filter(o => {
+            const d = new Date(o.createdAt);
+            return isValidDate(d) && isSameMonth(d, date);
+          }).length
         };
       });
     }
@@ -77,7 +84,6 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
         </button>
       </div>
 
-      {/* Earnings Widget */}
       <div className={`p-8 rounded-[2.5rem] bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-2xl relative overflow-hidden`}>
          <div className="relative z-10 flex flex-col gap-1">
             <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Total Earnings (Beres)</span>
