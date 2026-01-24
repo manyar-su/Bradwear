@@ -20,6 +20,30 @@ const GREETINGS = [
   "Hampir selesai! Lagi cocokin data rekapannya..."
 ];
 
+const INDO_MONTHS: Record<string, number> = {
+  'januari': 0, 'februari': 1, 'maret': 2, 'april': 3, 'mei': 4, 'juni': 5,
+  'juli': 6, 'agustus': 7, 'september': 8, 'oktober': 9, 'november': 10, 'desember': 11
+};
+
+const parseIndoDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  try {
+    const parts = dateStr.toLowerCase().split(' ');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0]);
+      const month = INDO_MONTHS[parts[1]];
+      const year = parseInt(parts[2]);
+      if (!isNaN(day) && month !== undefined && !isNaN(year)) {
+        return new Date(year, month, day);
+      }
+    }
+    const d = new Date(dateStr);
+    return !isNaN(d.getTime()) ? d : null;
+  } catch {
+    return null;
+  }
+};
+
 const isValidDate = (date: any): date is Date => {
   return date instanceof Date && !isNaN(date.getTime());
 };
@@ -46,7 +70,6 @@ const App: React.FC = () => {
     const savedPending = localStorage.getItem('pending_scan_result');
     if (savedPending) setScanResult(JSON.parse(savedPending));
 
-    // Request notification permission
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
@@ -61,7 +84,6 @@ const App: React.FC = () => {
       localStorage.removeItem('pending_scan_result');
     }
     
-    // Check for upcoming deadlines (1 day before)
     checkUpcomingDeadlines(orders);
   }, [orders, isDarkMode, scanResult]);
 
@@ -70,20 +92,15 @@ const App: React.FC = () => {
 
     allOrders.forEach(order => {
       if (order.status === JobStatus.PROSES && !order.deletedAt) {
-        try {
-          // Attempt to parse date string
-          const targetDate = new Date(order.tanggalTargetSelesai);
-          if (isValidDate(targetDate)) {
-            const daysLeft = differenceInDays(targetDate, new Date());
-            if (daysLeft === 1) {
-              new Notification("Peringatan Target!", {
-                body: `Order ${order.kodeBarang} (${order.model}) target besok! Mohon segera diselesaikan.`,
-                icon: "/favicon.ico"
-              });
-            }
+        const targetDate = parseIndoDate(order.tanggalTargetSelesai);
+        if (targetDate) {
+          const daysLeft = differenceInDays(targetDate, new Date());
+          if (daysLeft === 1) {
+            new Notification("BradwearFlow: Target Besok!", {
+              body: `Order ${order.kodeBarang} (${order.model}) harus beres besok!`,
+              icon: "/favicon.ico"
+            });
           }
-        } catch (e) {
-          // Ignore parse errors for custom date strings
         }
       }
     });
@@ -120,6 +137,7 @@ const App: React.FC = () => {
 
         const result: Partial<OrderItem> = {
           ...extracted,
+          namaPenjahit: '', // Selalu kosongkan sesuai permintaan user
           id: Math.random().toString(36).substr(2, 9),
           createdAt: new Date().toISOString(),
           status: JobStatus.PROSES,
@@ -211,7 +229,7 @@ const App: React.FC = () => {
       onScanClick={handleFloatingScanClick}
       isDarkMode={isDarkMode} 
     >
-      {scanResult && activeView !== 'SCAN' && !isScanning && (
+      {scanResult && scanResult.kodeBarang && activeView !== 'SCAN' && !isScanning && (
         <div 
           onClick={() => setActiveView('SCAN')}
           className="fixed top-20 left-4 right-4 z-[400] animate-in slide-in-from-top-4 duration-500 cursor-pointer"

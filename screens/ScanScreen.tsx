@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Loader2, Save, Plus, Trash2, ChevronLeft, RefreshCw, AlertTriangle, X, Upload, FileText, UserCircle, User, Package, Scissors, RotateCcw } from 'lucide-react';
+import { Camera, Loader2, Save, Plus, Trash2, ChevronLeft, AlertTriangle, Upload, FileText, Package, Scissors, RotateCcw } from 'lucide-react';
 import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -82,6 +82,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
       setFormData(prev => ({ 
         ...prev, 
         ...scanResultGlobal, 
+        namaPenjahit: prev.namaPenjahit || '', // Tetap biarkan jika user sudah mengetik, atau kosong jika baru
         isManual: false 
       }));
       setIsManualMode(false);
@@ -104,10 +105,24 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   }, [formData.sizeDetails]);
 
   const handleResetForm = () => {
-    if (window.confirm("Kosongkan semua input? Data yang belum disimpan akan hilang.")) {
-      setFormData(INITIAL_FORM_STATE);
-      setScanResultGlobal(null);
-      setIsManualMode(false);
+    if (scanResultGlobal) {
+      // Jika ada hasil scan, fungsinya menjadi "RESTORE" sesuai gambar & instruksi
+      if (window.confirm("Kembalikan seluruh data ke hasil scan AI (Restore)?")) {
+        setFormData({
+          ...INITIAL_FORM_STATE,
+          ...scanResultGlobal,
+          namaPenjahit: '', // Sesuai permintaan: Nama Penjahit tetap kosong
+          isManual: false
+        });
+      }
+    } else {
+      // Jika input manual, fungsinya tetap RESET total
+      if (window.confirm("Hapus semua data input dan kembali ke pemilihan metode?")) {
+        setScanResultGlobal(null);
+        setIsManualMode(false);
+        setFormData(INITIAL_FORM_STATE);
+        setFormData(prev => ({ ...prev, kodeBarang: '', isManual: true }));
+      }
     }
   };
 
@@ -157,6 +172,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     setScanResultGlobal(null);
     setFormData(prev => ({
       ...prev, isManual: true,
+      namaPenjahit: '',
       sizeDetails: [{ size: '', jumlah: 0, gender: 'Pria', tangan: 'Pendek', namaPerSize: '' }]
     }));
   };
@@ -187,7 +203,6 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     setShowConfirmPopup(false);
   };
 
-  // Logic to determine warning intensity
   const daysUntilDeadline = formData.tanggalTargetSelesai ? differenceInDays(new Date(formData.tanggalTargetSelesai), new Date()) : 999;
   const isUrgent = daysUntilDeadline <= 1;
 
@@ -195,18 +210,26 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     <div className={`p-4 md:p-8 pb-32 min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
       <style>{`
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        @keyframes pulseWarning {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
-          50% { transform: scale(1.02); box-shadow: 0 0 20px 10px rgba(249, 115, 22, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+        
+        @keyframes urgentCycle {
+          0% { background-color: #ef4444; border-color: #f87171; box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.3); }
+          50% { background-color: #f97316; border-color: #fb923c; box-shadow: 0 0 30px 10px rgba(249, 115, 22, 0.4); }
+          100% { background-color: #ef4444; border-color: #f87171; box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.3); }
         }
-        @keyframes urgentWarning {
+
+        @keyframes normalCycle {
           0% { background-color: #f97316; border-color: #fb923c; }
-          50% { background-color: #ef4444; border-color: #f87171; }
+          50% { background-color: #fbbf24; border-color: #fcd34d; }
           100% { background-color: #f97316; border-color: #fb923c; }
         }
-        .animate-warning { animation: pulseWarning 2s infinite ease-in-out; }
-        .animate-urgent { animation: urgentWarning 1s infinite linear, pulseWarning 1.5s infinite ease-in-out; }
+
+        .animate-urgent-cycle {
+          animation: urgentCycle 1.5s infinite ease-in-out;
+        }
+
+        .animate-normal-cycle {
+          animation: normalCycle 4s infinite ease-in-out;
+        }
       `}</style>
 
       {showConfirmPopup && (
@@ -244,6 +267,19 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
            <button onClick={onCancel} className={`p-2.5 rounded-2xl transition-all ${isDarkMode ? 'bg-slate-900 text-slate-400 hover:text-slate-100' : 'bg-white text-slate-400 hover:text-slate-600 shadow-sm border border-slate-100'}`}><ChevronLeft /></button>
            <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Input Kerja Baru</h2>
         </div>
+        
+        {/* Tombol Reset/Restore di Header sesuai instruksi visual */}
+        {(formData.kodeBarang || isManualMode) && !isScanningGlobal && (
+          <button 
+            type="button"
+            onClick={handleResetForm}
+            title={scanResultGlobal ? "Restore data scan asli" : "Reset form"}
+            className={`flex items-center gap-2 p-3 rounded-2xl transition-all shadow-sm active:scale-95 border-2 ${scanResultGlobal ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : isDarkMode ? 'bg-slate-900 text-red-400 border-slate-800' : 'bg-white text-red-500 border-slate-100'}`}
+          >
+            <RotateCcw size={20} className={scanResultGlobal ? "text-emerald-500" : ""} />
+            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">{scanResultGlobal ? "Restore" : "Reset"}</span>
+          </button>
+        )}
       </div>
 
       {isScanningGlobal ? (
@@ -278,13 +314,13 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
               
               {!formData.isManual && formData.kodeBarang && (
                 <div className="sticky top-0 z-[60] -mx-2 mb-6 px-2 animate-in slide-in-from-top duration-500">
-                  <div className={`p-5 rounded-[2.5rem] shadow-2xl flex items-center justify-between border-2 ring-8 backdrop-blur-md ${isUrgent ? 'animate-urgent text-white ring-red-500/10' : 'animate-warning text-white bg-orange-500 border-orange-400 ring-orange-500/10'}`}>
+                  <div className={`p-5 rounded-[2.5rem] shadow-2xl flex items-center justify-between border-2 ring-8 backdrop-blur-md text-white ${isUrgent ? 'animate-urgent-cycle ring-red-500/20' : 'animate-normal-cycle ring-orange-500/20'}`}>
                     <div className="flex items-center gap-4">
                       <div className="p-2.5 bg-white/20 rounded-2xl">
                         <AlertTriangle size={24} className={isUrgent ? "animate-bounce" : ""} />
                       </div>
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-tight">
-                        Kerjaan belum disimpen nih<br/><span className="opacity-80">nanti hilang!</span>
+                        NIH KERJAAN BELUM DISIMPEN!<br/><span className="opacity-80">NANTI HILANG!</span>
                       </p>
                     </div>
                     <div className="p-3 bg-white/20 rounded-2xl">
@@ -296,7 +332,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
               <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormInput label="Penjahit" value={formData.namaPenjahit} onChange={v => setFormData({...formData, namaPenjahit: v})} required isDarkMode={isDarkMode} placeholder="Nama Penjahit" />
+                  <FormInput label="Penjahit" value={formData.namaPenjahit} onChange={v => setFormData({...formData, namaPenjahit: v})} required isDarkMode={isDarkMode} placeholder="Isi Nama Penjahit" />
                   <FormInput 
                     label="Kode Barang" 
                     value={formData.kodeBarang} 
@@ -322,6 +358,32 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                     </select>
                   </FormInput>
                   <FormInput label="Warna" value={formData.warna} onChange={v => setFormData({...formData, warna: v})} isDarkMode={isDarkMode} placeholder="Putih" />
+                </div>
+              </div>
+
+              <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 ml-2 tracking-[0.2em]"><Package size={14}/> Konfigurasi Saku</h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <FormInput label="Tipe Saku" isDarkMode={isDarkMode}>
+                    <select 
+                      className={`w-full h-14 px-5 rounded-2xl text-sm font-black transition-all outline-none focus:ring-2 focus:ring-[#10b981]/20 appearance-none bg-no-repeat bg-[right_1.25rem_center] ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-800 shadow-inner'}`} 
+                      value={formData.sakuType} 
+                      onChange={(e) => setFormData({...formData, sakuType: e.target.value as SakuType})}
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='${isDarkMode ? '%23475569' : '%2394a3b8'}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
+                    >
+                      {Object.values(SakuType).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </FormInput>
+                  <FormInput label="Warna Saku" isDarkMode={isDarkMode}>
+                    <select 
+                      className={`w-full h-14 px-5 rounded-2xl text-sm font-black transition-all outline-none focus:ring-2 focus:ring-[#10b981]/20 appearance-none bg-no-repeat bg-[right_1.25rem_center] ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-800 shadow-inner'}`} 
+                      value={formData.sakuColor} 
+                      onChange={(e) => setFormData({...formData, sakuColor: e.target.value as SakuColor})}
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='${isDarkMode ? '%23475569' : '%2394a3b8'}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
+                    >
+                      {Object.values(SakuColor).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </FormInput>
                 </div>
               </div>
 
@@ -396,16 +458,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
               <div className="space-y-4">
                 <button type="submit" className="w-full bg-[#10b981] text-white font-black py-7 rounded-[3rem] shadow-2xl flex items-center justify-center gap-4 active:scale-[0.98] transition-all text-xl uppercase tracking-widest hover:brightness-105">
-                  <Save size={28} /> Simpan Pekerjaan
-                </button>
-                
-                {/* BATAL SIMPAN BUTTON */}
-                <button 
-                  type="button" 
-                  onClick={handleResetForm}
-                  className={`w-full py-5 rounded-[2.5rem] border-2 border-dashed flex items-center justify-center gap-3 font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-95 ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200'}`}
-                >
-                  <RotateCcw size={16} /> Batal Simpan & Reset
+                  <Save size={28} /> SIMPAN PEKERJAAN
                 </button>
               </div>
             </div>

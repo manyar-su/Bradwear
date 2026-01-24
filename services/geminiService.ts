@@ -1,9 +1,11 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const extractOrderData = async (base64Image: string) => {
+  // Ambil API Key dari localStorage jika ada, jika tidak gunakan sistem
+  const userApiKey = localStorage.getItem('bradwear_gemini_key');
+  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY });
+  
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -17,10 +19,10 @@ export const extractOrderData = async (base64Image: string) => {
           },
           {
             text: `Extract production data from this Bradwear recruitment/order slip image.
-            Focus on accuracy for all fields.
+            Focus on accuracy for all fields. 
+            Note: DO NOT extract tailor name (namaPenjahit), keep it empty.
             
             Fields needed:
-            - namaPenjahit: Name of the person sewing.
             - kodeBarang: The order ID or product code (often a 4-digit number).
             - tanggalOrder: The date the order was made.
             - tanggalTargetSelesai: The deadline or target date.
@@ -44,7 +46,6 @@ export const extractOrderData = async (base64Image: string) => {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            namaPenjahit: { type: Type.STRING },
             kodeBarang: { type: Type.STRING },
             tanggalOrder: { type: Type.STRING },
             tanggalTargetSelesai: { type: Type.STRING },
@@ -81,6 +82,9 @@ export const extractOrderData = async (base64Image: string) => {
 };
 
 export const extractSplitData = async (base64Images: string[]) => {
+  const userApiKey = localStorage.getItem('bradwear_gemini_key');
+  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY });
+  
   try {
     const parts = base64Images.map(img => ({
       inlineData: { mimeType: 'image/jpeg', data: img }

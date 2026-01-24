@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare } from 'lucide-react';
+import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare, Key, CheckCircle2 } from 'lucide-react';
 import { extractSplitData } from '../services/geminiService';
 import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus } from '../types';
 import { format } from 'date-fns';
@@ -28,6 +28,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [showRecyclePopup, setShowRecyclePopup] = useState(false);
   const [showEmbroideryPopup, setShowEmbroideryPopup] = useState(false);
+  const [showApiKeyPopup, setShowApiKeyPopup] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
@@ -46,6 +48,9 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const [newPriceName, setNewPriceName] = useState('');
   const [newPriceValue, setNewPriceValue] = useState('');
   const [isAddingNewPrice, setIsAddingNewPrice] = useState(false);
+
+  // API Key State
+  const [tempGeminiKey, setTempGeminiKey] = useState(() => localStorage.getItem('bradwear_gemini_key') || '');
 
   // Embroidery Edit State
   const [editingEmbroideryOrder, setEditingEmbroideryOrder] = useState<OrderItem | null>(null);
@@ -74,7 +79,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const monthlyReports = useMemo(() => {
     const stats: Record<string, { totalOrders: number, totalPcs: number, totalEarnings: number, rawDate: Date, ordersList: OrderItem[] }> = {};
     
-    // Combining active and recycle bin items for earnings history
     const allOrdersForEarning = [...orders, ...deletedOrders];
     
     allOrdersForEarning.forEach(o => {
@@ -93,6 +97,13 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     });
     return Object.entries(stats).sort((a, b) => b[1].rawDate.getTime() - a[1].rawDate.getTime());
   }, [orders, deletedOrders, prices]);
+
+  const handleSaveApiKey = () => {
+    localStorage.setItem('bradwear_gemini_key', tempGeminiKey);
+    setShowApiKeyPopup(false);
+    setShowSuccessToast(true);
+    setTimeout(() => setShowSuccessToast(false), 3000);
+  };
 
   const handleGoogleLogin = () => {
     setLoading(true);
@@ -159,8 +170,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     const namesToUse = customNames;
     if (namesToUse.length === 0) return [];
     
-    // Flatten all order items into a single pool for distribution
-    // Item structure: { kodeBarang, size, jumlah }
     let distributionPool: any[] = [];
     orders.forEach(order => {
       order.sizeCounts.forEach((sc: any) => {
@@ -175,7 +184,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       });
     });
 
-    // Sort by largest counts first for greedy distribution
     distributionPool.sort((a, b) => b.jumlah - a.jumlah);
 
     const targetPerPerson = Math.floor(totalPcs / namesToUse.length);
@@ -188,12 +196,10 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       target: targetPerPerson + (i < remainder ? 1 : 0)
     }));
     
-    // Distribute greedily
     tailorResults.forEach((tailor) => {
       let needed = tailor.target;
       
       while (needed > 0 && distributionPool.length > 0) {
-        // Find best pile
         let bestPileIdx = -1;
         for (let i = 0; i < distributionPool.length; i++) {
           if (distributionPool[i].jumlah <= needed) {
@@ -213,11 +219,10 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
           needed -= pile.jumlah;
           distributionPool.splice(bestPileIdx, 1);
         } else {
-          // Take from largest
           const largestPile = distributionPool[0];
           const take = needed;
           tailor.items.push({ 
-            kodeBarang: largestPile.size, 
+            kodeBarang: largestPile.kodeBarang, 
             size: largestPile.size, 
             count: take 
           });
@@ -266,7 +271,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       text += `Total: ${res.totalItems} PCS\n`;
       text += `Detail Kerja:\n`;
       
-      // Group by kode barang for cleaner output
       const groupedByCode: Record<string, any[]> = {};
       res.items.forEach(it => {
         if (!groupedByCode[it.kodeBarang]) groupedByCode[it.kodeBarang] = [];
@@ -347,6 +351,20 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-slate-900' : 'bg-[#f4f7f9]'}`}>
+      
+      {/* SUCCESS TOAST ALREADY IN SCREEN */}
+      {showSuccessToast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[500] animate-in slide-in-from-top duration-500">
+           <div className="bg-[#10b981] text-white px-6 py-4 rounded-[2rem] shadow-2xl flex items-center gap-3 border-2 border-white/20">
+              <CheckCircle2 size={24} className="animate-bounce" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest leading-none">Berhasil Disimpan</span>
+                <span className="text-[8px] font-bold text-emerald-100 uppercase mt-1">Konfigurasi API diperbarui</span>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="p-6 space-y-8 pb-32 animate-in fade-in duration-500">
         <input type="file" ref={fileInputRef} hidden accept="image/*" multiple onChange={(e) => e.target.files && handleSplitScan(e.target.files)} />
         <input type="file" ref={profileInputRef} hidden accept="image/*" onChange={handleProfileUpload} />
@@ -383,6 +401,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
           <div>
             <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Sistem</h5>
             <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
+              <MenuItem icon={<Key className="text-amber-600" />} label="API KEY Management" isDarkMode={isDarkMode} onClick={() => setShowApiKeyPopup(true)} badge="NEW" />
+              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
               <MenuItem icon={<Info className="text-blue-500" />} label="Laporan Bulanan" isDarkMode={isDarkMode} onClick={() => setShowReportPopup(true)} badge="AI" />
               <div className="h-[1px] mx-4 bg-[#f8fafc]" />
               <MenuItem icon={<Trash2 className="text-red-500" />} label="Tempat Sampah" isDarkMode={isDarkMode} onClick={() => setShowRecyclePopup(true)} badge={deletedOrders.length.toString()} />
@@ -397,6 +417,54 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
           </button>
         </div>
       </div>
+
+      {/* API KEY POPUP */}
+      {showApiKeyPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col gap-6 ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'}`}>
+              <div className="flex justify-between items-center">
+                 <h3 className="text-xl font-black">Konfigurasi API</h3>
+                 <button onClick={() => setShowApiKeyPopup(false)} className="text-slate-400 hover:text-red-500"><X size={24} /></button>
+              </div>
+              
+              <div className="space-y-4">
+                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 flex gap-3">
+                    <AlertTriangle className="text-amber-600 shrink-0" size={20} />
+                    <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase tracking-widest">Kunci ini digunakan untuk fitur pemindaian AI. Pastikan kunci valid untuk menghindari error.</p>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Provider: Google Gemini</label>
+                    <div className="relative">
+                       <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                       <input 
+                         type="password"
+                         className={`w-full pl-12 pr-4 py-4 rounded-2xl text-xs font-black border outline-none focus:ring-4 focus:ring-amber-500/10 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-100 text-slate-800'}`}
+                         placeholder="AIzaSyB..."
+                         value={tempGeminiKey}
+                         onChange={e => setTempGeminiKey(e.target.value)}
+                       />
+                    </div>
+                 </div>
+              </div>
+
+              <div className="flex gap-3">
+                 <button 
+                  onClick={() => setShowApiKeyPopup(false)}
+                  className={`flex-1 py-4 rounded-3xl font-black text-[10px] uppercase border transition-all ${isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-400'}`}
+                 >
+                   Batal
+                 </button>
+                 <button 
+                  onClick={handleSaveApiKey}
+                  className="flex-[2] py-4 bg-[#10b981] text-white rounded-3xl font-black text-[10px] uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                 >
+                   <Save size={16} /> Simpan Kunci
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* Split AI Popup */}
       {showSplitPopup && (
@@ -457,7 +525,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                     </button>
                   </div>
 
-                  {/* Summary Box based on Screenshot */}
                   <div className="p-5 rounded-[2.5rem] bg-[#e6f7ef] border border-[#10b981]/10 flex justify-between items-center shadow-inner">
                     <div className="space-y-1">
                       <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Total Produksi</p>
@@ -472,7 +539,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                   <div className="space-y-3">
                     {calculatedDistribution.map((t, i) => {
                       const isSelected = selectedIndicesForShare.has(i);
-                      // Determine how many unique codes this tailor has
                       const uniqueCodes = Array.from(new Set(t.items.map(it => it.kodeBarang)));
                       
                       return (
@@ -607,7 +673,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                  ))}
               </div>
 
-              {/* Permanent Delete Confirmation Overlay */}
               {deleteConfirmId && (
                 <div className="absolute inset-0 z-[110] bg-black/60 backdrop-blur-md flex items-center justify-center p-6 rounded-[3rem] animate-in fade-in duration-300">
                   <div className={`w-full max-w-[280px] p-8 rounded-[2rem] shadow-2xl border text-center flex flex-col items-center animate-in zoom-in duration-300 ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-50'}`}>
