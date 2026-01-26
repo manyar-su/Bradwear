@@ -6,7 +6,10 @@ import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus } from '../types
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 
-const DEFAULT_TAILOR_NAMES = ["Maris", "Fadil", "Aan", "Farid", "Opik"];
+const DEFAULT_TAILOR_NAMES = [
+  "Maris", "Ferry", "Aan", "Farid", "Opik", 
+  "Fadil", "Asep", "Abdul", "Hadi", "Epul"
+];
 
 const MenuItem = ({ icon, label, isDarkMode, onClick, badge }: any) => (
   <button onClick={onClick} className={`w-full p-4 flex items-center justify-between transition-all active:bg-slate-50`}>

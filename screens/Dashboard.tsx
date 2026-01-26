@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Flame, PlusCircle } from 'lucide-react';
+import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Flame, PlusCircle, Layers, DollarSign, History, BarChart2 } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -267,8 +267,12 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
 
       <div className={`sticky top-0 z-30 px-6 py-4 flex justify-between items-center backdrop-blur-md border-b transition-colors ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-50/80 border-slate-200'}`}>
          <div className="flex items-center gap-3">
-            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-white shadow-sm'}`}>
-              <span className="text-sm font-black text-[#10b981]">{format(new Date(), 'HH:mm')}</span>
+            <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 ${isDarkMode ? 'border-slate-700 bg-slate-800 shadow-[0_0_10px_rgba(57,255,20,0.2)]' : 'border-slate-100 bg-white shadow-sm'}`}>
+              {/* Neon Icon Style Header */}
+              <div className="w-6 h-6 bg-black rounded flex items-center justify-center p-0.5 border border-[#39FF14]/50">
+                <span className="text-[6px] font-black leading-none text-center" style={{ color: '#39FF14', textShadow: '0 0 2px #39FF14' }}>BRAD<br/>WEAR</span>
+              </div>
+              <span className={`text-sm font-black ${isDarkMode ? 'text-[#39FF14]' : 'text-[#10b981]'}`}>{format(new Date(), 'HH:mm')}</span>
             </div>
             <div>
               <h2 className={`text-lg font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Bradwear Flow</h2>
@@ -280,6 +284,14 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
       </div>
 
       <div className="p-6 space-y-6 flex flex-col items-center">
+        {/* Quick Menu Grid ala Fintech */}
+        <div className="w-full max-w-sm grid grid-cols-4 gap-4 px-2 py-4 animate-in slide-in-from-top-4 duration-700">
+           <QuickMenuButton icon={<Package className="text-[#10b981]" />} label="Scan" onClick={onScanClick} isDarkMode={isDarkMode} />
+           <QuickMenuButton icon={<History className="text-blue-500" />} label="History" onClick={onViewHistory} isDarkMode={isDarkMode} />
+           <QuickMenuButton icon={<Layers className="text-orange-500" />} label="Pecah" onClick={() => {}} isDarkMode={isDarkMode} />
+           <QuickMenuButton icon={<BarChart2 className="text-purple-500" />} label="Stats" onClick={() => {}} isDarkMode={isDarkMode} />
+        </div>
+
         <div className={`w-full max-sm p-6 rounded-[2.5rem] border shadow-lg relative overflow-hidden animate-in slide-in-from-bottom-4 duration-700 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`}>
           <div className="relative z-10">
             <div className="flex justify-between items-center mb-6">
@@ -344,16 +356,6 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                 <X size={16} />
               </button>
             )}
-          </div>
-
-          <div className="flex justify-center">
-            <button 
-              onClick={onScanClick}
-              className={`flex items-center gap-2 px-6 py-2 rounded-full border transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-500' : 'bg-white border-slate-100 text-emerald-600 shadow-sm'}`}
-            >
-              <PlusCircle size={14} strokeWidth={3} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Input Kerja Baru</span>
-            </button>
           </div>
 
           {showSearchResults && localSearch.trim() && (
@@ -470,5 +472,17 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
     </div>
   );
 };
+
+const QuickMenuButton = ({ icon, label, onClick, isDarkMode }: any) => (
+  <button 
+    onClick={onClick}
+    className="flex flex-col items-center gap-2 active:scale-95 transition-all"
+  >
+    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-100'}`}>
+      {icon}
+    </div>
+    <span className={`text-[9px] font-black uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+  </button>
+);
 
 export default Dashboard;

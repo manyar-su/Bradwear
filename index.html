@@ -6,7 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#10b981">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="metadata.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='black'/%3E%3Ctext x='50%25' y='42%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='120' fill='none' stroke='%2339FF14' stroke-width='4' filter='drop-shadow(0 0 10px %2339FF14)'%3EBRAD%3C/text%3E%3Ctext x='50%25' y='68%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='120' fill='none' stroke='%2339FF14' stroke-width='4' filter='drop-shadow(0 0 10px %2339FF14)'%3EWEAR%3C/text%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='black'/%3E%3Ctext x='50%25' y='42%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='120' fill='none' stroke='%2339FF14' stroke-width='4' filter='drop-shadow(0 0 10px %2339FF14)'%3EBRAD%3C/text%3E%3Ctext x='50%25' y='68%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='120' fill='none' stroke='%2339FF14' stroke-width='4' filter='drop-shadow(0 0 10px %2339FF14)'%3EWEAR%3C/text%3E%3C/svg%3E">
     <title>Bradwear Production Flow</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -23,13 +26,17 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* Smooth transitions for a native feel */
         .page-transition {
           animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
         @keyframes slideUp {
           from { transform: translateY(20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
+        }
+
+        .neon-text {
+          color: #39FF14;
+          text-shadow: 0 0 5px #39FF14, 0 0 10px #39FF14;
         }
     </style>
 <script type="importmap">

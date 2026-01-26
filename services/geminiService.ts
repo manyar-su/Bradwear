@@ -18,25 +18,20 @@ export const extractOrderData = async (base64Image: string) => {
             }
           },
           {
-            text: `Extract production data from this Bradwear recruitment/order slip image.
-            Focus on accuracy for all fields. 
-            Note: DO NOT extract tailor name (namaPenjahit), keep it empty.
+            text: `Extract exact text data from this order slip image. 
+            Act as a high-precision OCR engine.
+            MAPPING RULES:
+            - Find the numeric order ID/product code for 'kodeBarang'.
+            - Extract 'tanggalOrder' and 'tanggalTargetSelesai'.
+            - Find Admin/CS name for 'cs'.
+            - Find Client/Customer name for 'konsumen'.
+            - Sum all item counts for 'jumlahPesanan'.
+            - List all items in 'sizeDetails' (size, jumlah, gender, tangan).
+            - Identify 'model', 'warna', 'sakuType', 'sakuColor'.
+            - Put all extra handwritten notes into 'deskripsiPekerjaan'.
+            - LEAVE 'namaPenjahit' EMPTY.
             
-            Fields needed:
-            - kodeBarang: The order ID or product code (often a 4-digit number).
-            - tanggalOrder: The date the order was made.
-            - tanggalTargetSelesai: The deadline or target date.
-            - cs: Customer Service name.
-            - konsumen: The client or customer name.
-            - jumlahPesanan: Total pieces.
-            - sizeDetails: A list of items containing: size, count (jumlah), gender (Pria/Wanita), and arm type (Panjang/Pendek).
-            - model: The product model name.
-            - warna: Product color.
-            - sakuType: Type of pocket (Polos/Skotlait/Peterban).
-            - sakuColor: Pocket color (Abu/Hitam/etc).
-            - deskripsiPekerjaan: All other relevant notes found on the paper.
-
-            Important: Return ONLY a valid JSON object matching the schema. Do not include markdown formatting or extra text.`
+            Return ONLY a valid JSON object matching the schema.`
           }
         ]
       },
@@ -95,7 +90,7 @@ export const extractSplitData = async (base64Images: string[]) => {
       contents: {
         parts: [
           ...parts,
-          { text: "Extract metadata and size counts from all provided images. If multiple images are provided, treat them as separate orders. Return JSON with an 'orders' array." }
+          { text: "OCR all provided images. Extract product codes, models, and size counts per item. Return JSON with an 'orders' array." }
         ]
       },
       config: {
