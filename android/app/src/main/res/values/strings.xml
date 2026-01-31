@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">bradflow</string>
+    <string name="title_activity_main">bradflow</string>
+    <string name="package_name">com.bradwear.flow</string>
+    <string name="custom_url_scheme">com.bradwear.flow</string>
+</resources>
