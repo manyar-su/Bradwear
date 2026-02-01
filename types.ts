@@ -77,6 +77,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isMe?: boolean;
+  image?: string;
 }
 
 export type ViewState = 'DASHBOARD' | 'SCAN' | 'HISTORY' | 'ANALYTICS' | 'ACCOUNT' | 'FORUM_CHAT';

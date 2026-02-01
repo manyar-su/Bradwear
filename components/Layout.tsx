@@ -12,6 +12,17 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange, onScanClick, isDarkMode }) => {
+  const navItems: { view: ViewState | 'SCAN'; label: string; icon: any }[] = [
+    { view: 'DASHBOARD', label: 'Home', icon: Home },
+    { view: 'HISTORY', label: 'History', icon: Clock },
+    { view: 'SCAN', label: 'Scan', icon: Scan },
+    { view: 'ANALYTICS', label: 'Stats', icon: BarChart3 },
+    { view: 'FORUM_CHAT', label: 'Forum', icon: MessageSquare },
+    { view: 'ACCOUNT', label: 'Account', icon: User },
+  ];
+
+  const activeIndex = navItems.findIndex(item => item.view === activeView || (item.view === 'SCAN' && activeView === 'SCAN'));
+
   return (
     <div className={`flex flex-col h-screen w-full relative overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-slate-950' : 'bg-[#f4f7f9]'}`}>
 
@@ -23,69 +34,42 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange, onS
           {children}
         </main>
 
-        {/* Fintech Bottom Navigation - Expanded for tablets */}
-        <nav className={`absolute bottom-0 left-0 right-0 flex justify-around items-center h-20 px-4 md:px-12 pb-safe z-50 transition-colors duration-300 rounded-t-[2.5rem] md:rounded-none ${isDarkMode ? 'bg-slate-900 border-t border-slate-800' : 'bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]'}`}>
-          <NavItem
-            icon={<Home size={24} />}
-            label="Home"
-            active={activeView === 'DASHBOARD'}
-            onClick={() => onViewChange('DASHBOARD')}
-            isDarkMode={isDarkMode}
-          />
-          <NavItem
-            icon={<Clock size={24} />}
-            label="History"
-            active={activeView === 'HISTORY'}
-            onClick={() => onViewChange('HISTORY')}
-            isDarkMode={isDarkMode}
-          />
+        {/* Fintech Bottom Navigation */}
+        <div className={`absolute bottom-0 left-0 right-0 h-24 px-4 pb-safe z-50 transition-colors duration-300 rounded-t-[2.5rem] border-t ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]'}`}>
+          <nav className="relative flex justify-around items-center h-20 w-full px-2">
 
-          <NavItem
-            icon={<MessageSquare size={24} />}
-            label="Forum"
-            active={activeView === 'FORUM_CHAT'}
-            onClick={() => onViewChange('FORUM_CHAT')}
-            isDarkMode={isDarkMode}
-          />
+            {/* Animated Active Indicator */}
+            <div
+              className="absolute h-14 bg-[#10b981] rounded-2xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow-lg shadow-emerald-500/20"
+              style={{
+                width: `${100 / navItems.length}%`,
+                left: `${(activeIndex * 100) / navItems.length}%`,
+                transform: 'scale(0.85)',
+              }}
+            />
 
-          {/* Floating Center Button */}
-          <div className="relative -top-6 flex flex-col items-center">
-            <button
-              onClick={onScanClick}
-              className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl transition-all active:scale-90 bg-[#10b981] text-white hover:brightness-110`}
-            >
-              <Scan size={28} strokeWidth={2.5} />
-            </button>
-          </div>
+            {navItems.map((item, idx) => {
+              const Icon = item.icon;
+              const isActive = idx === activeIndex;
 
-          <NavItem
-            icon={<BarChart3 size={24} />}
-            label="Stats"
-            active={activeView === 'ANALYTICS'}
-            onClick={() => onViewChange('ANALYTICS')}
-            isDarkMode={isDarkMode}
-          />
-          <NavItem
-            icon={<User size={24} />}
-            label="Account"
-            active={activeView === 'ACCOUNT'}
-            onClick={() => onViewChange('ACCOUNT')}
-            isDarkMode={isDarkMode}
-          />
-        </nav>
+              return (
+                <button
+                  key={item.view}
+                  onClick={() => item.view === 'SCAN' ? onScanClick() : onViewChange(item.view as ViewState)}
+                  className={`relative z-10 flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ${isActive ? 'text-white' : isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}
+                >
+                  <Icon size={isActive ? 20 : 22} strokeWidth={isActive ? 2.5 : 2} />
+                  <span className={`text-[9px] font-black uppercase tracking-tighter mt-1 transition-all ${isActive ? 'opacity-100 translate-y-0.5' : 'opacity-60'}`}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
       </div>
     </div>
   );
 };
-
-const NavItem = ({ icon, label, active, onClick, isDarkMode }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, isDarkMode: boolean }) => (
-  <button
-    onClick={onClick}
-    className={`flex flex-col items-center justify-center space-y-1 transition-all min-w-[60px] ${active ? 'text-[#10b981]' : isDarkMode ? 'text-slate-500' : 'text-[#94a3b8]'} hover:text-[#10b981]`}
-  >
-    {icon}
-    <span className={`text-[11px] font-bold tracking-tight ${active ? 'font-black' : ''}`}>{label}</span>
-  </button>
-);
 
 export default Layout;

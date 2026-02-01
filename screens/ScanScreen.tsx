@@ -5,6 +5,8 @@ import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS } from
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 
+import { syncService } from '../services/syncService';
+
 interface ScanScreenProps {
   onSave: (order: OrderItem) => void;
   onCancel: () => void;
@@ -25,7 +27,7 @@ const GREETINGS = [
 ];
 
 const INITIAL_FORM_STATE: Partial<OrderItem> = {
-  namaPenjahit: '',
+  namaPenjahit: 'Nama Anda',
   kodeBarang: '',
   tanggalOrder: format(new Date(), 'd MMMM yyyy', { locale: idLocale }),
   tanggalTargetSelesai: '',
@@ -54,6 +56,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const [greeting, setGreeting] = useState(GREETINGS[0]);
   const [isManualMode, setIsManualMode] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateOwner, setDuplicateOwner] = useState<string | null>(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
 
   const [formData, setFormData] = useState<Partial<OrderItem>>(INITIAL_FORM_STATE);
@@ -92,10 +95,22 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   }, [scanResultGlobal]);
 
   useEffect(() => {
-    if (formData.kodeBarang && existingOrders.some(o => o.kodeBarang === formData.kodeBarang)) {
-      setShowDuplicateWarning(true);
+    if (formData.kodeBarang) {
+      // Local check
+      const localDup = existingOrders.find(o => o.kodeBarang === formData.kodeBarang);
+      // Global check
+      const globalDup = syncService.checkDuplicateCode(formData.kodeBarang);
+
+      if (localDup || globalDup) {
+        setShowDuplicateWarning(true);
+        setDuplicateOwner((globalDup?.namaPenjahit || localDup?.namaPenjahit || null));
+      } else {
+        setShowDuplicateWarning(false);
+        setDuplicateOwner(null);
+      }
     } else {
       setShowDuplicateWarning(false);
+      setDuplicateOwner(null);
     }
   }, [formData.kodeBarang, existingOrders]);
 
@@ -164,7 +179,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     setScanResultGlobal(null);
     setFormData(prev => ({
       ...prev, isManual: true,
-      namaPenjahit: '',
+      namaPenjahit: 'Nama Anda',
       sizeDetails: [{ size: '', jumlah: 0, gender: 'Pria', tangan: 'Pendek', namaPerSize: '' }]
     }));
   };
@@ -233,7 +248,9 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
             <div className="space-y-2">
               <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Kode Barang Sudah Ada</h4>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                Kode <span className="text-red-500 font-black">{formData.kodeBarang}</span> sudah terdaftar dalam sistem. Anda ingin tetap menggandakannya?
+                Kode <span className="text-red-500 font-black">{formData.kodeBarang}</span> sudah terdaftar {duplicateOwner ? `atas nama ` : ''}
+                {duplicateOwner && <span className="text-emerald-500 font-black">{duplicateOwner}</span>}.
+                Anda ingin tetap masuk?
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

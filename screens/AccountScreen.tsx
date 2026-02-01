@@ -39,7 +39,7 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const [isSyncing, setIsSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [profileName, setProfileName] = useState(() => localStorage.getItem('profileName') || 'Nama Penjahit');
+  const [profileName, setProfileName] = useState(() => localStorage.getItem('profileName') || 'Nama Anda');
   const [profileImage, setProfileImage] = useState(() => localStorage.getItem('profileImage') || null);
   const [isEditingName, setIsEditingName] = useState(false);
 

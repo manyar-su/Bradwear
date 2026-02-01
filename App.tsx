@@ -12,7 +12,7 @@ import { differenceInDays, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { extractOrderData } from './services/geminiService';
 import { syncService } from './services/syncService';
-import { Camera, Upload, X, FileText, Loader2, Keyboard, AlertTriangle, ChevronRight, LogOut, MessageSquare } from 'lucide-react';
+import { Camera, Upload, X, FileText, Loader2, Keyboard, AlertTriangle, ChevronRight, LogOut, MessageSquare, Sparkles } from 'lucide-react';
 // Capacitor plugins will be accessed dynamically to avoid build issues if not installed
 
 const GREETINGS = [
@@ -68,6 +68,8 @@ const App: React.FC = () => {
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
 
+  const [globalNotification, setGlobalNotification] = useState<{ sender: string, kode: string } | null>(null);
+
   useEffect(() => {
     const saved = localStorage.getItem('tailor_orders');
     if (saved) setOrders(JSON.parse(saved));
@@ -75,14 +77,26 @@ const App: React.FC = () => {
     const savedPending = localStorage.getItem('pending_scan_result');
     if (savedPending) setScanResult(JSON.parse(savedPending));
 
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'bradwear_global_notif') {
+        try {
+          const notif = JSON.parse(e.newValue || '{}');
+          const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+          // Only show if sender is NOT me
+          if (notif.sender !== profileName) {
+            setGlobalNotification(notif);
+            setTimeout(() => setGlobalNotification(null), 5000);
+          }
+        } catch { }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
 
-    const CapLocalNotifications = (window as any).Capacitor?.Plugins?.LocalNotifications;
-    if (CapLocalNotifications) {
-      CapLocalNotifications.requestPermissions();
-    }
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   useEffect(() => {
@@ -175,7 +189,7 @@ const App: React.FC = () => {
     setIsScanning(true);
     isScanningRef.current = true;
     setShowScanMethodPopup(false);
-    const profileName = localStorage.getItem('profileName') || '';
+    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
 
     try {
       const extracted = await extractOrderData(base64);
@@ -349,6 +363,27 @@ const App: React.FC = () => {
       onScanClick={handleFloatingScanClick}
       isDarkMode={isDarkMode}
     >
+      {/* Global Notification Toast */}
+      {globalNotification && (
+        <div className="fixed top-24 left-4 right-4 z-[600] animate-in slide-in-from-top-4 duration-500">
+          <div className="bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-[2rem] shadow-2xl flex items-center gap-4 border border-slate-700/50 overflow-hidden">
+            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center flex-shrink-0 animate-pulse shadow-lg shadow-emerald-500/20">
+              <Sparkles size={24} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest mb-0.5">Kerjaan Baru!</p>
+              <p className="text-xs font-bold leading-tight line-clamp-2">
+                <span className="text-white italic">{globalNotification.sender}</span> baru saja mengerjakan kode <span className="text-emerald-400">#{globalNotification.kode}</span>
+              </p>
+            </div>
+            <button onClick={() => setGlobalNotification(null)} className="p-2 text-slate-500">
+              <X size={18} />
+            </button>
+            <div className="absolute bottom-0 left-0 h-1 bg-emerald-500 transition-all duration-5000 ease-linear w-full" />
+          </div>
+        </div>
+      )}
+
       {scanResult && scanResult.kodeBarang && activeView !== 'SCAN' && !isScanning && (
         <div
           onClick={() => setActiveView('SCAN')}

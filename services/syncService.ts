@@ -5,23 +5,42 @@ import { OrderItem, ChatMessage } from '../types';
 // We simulate the "Cloud" using a special localStorage key.
 const CLOUD_ORDERS_KEY = 'bradwear_global_orders';
 const CLOUD_CHAT_KEY = 'bradwear_global_chat';
+const GLOBAL_NOTIF_KEY = 'bradwear_global_notif';
 
 export const syncService = {
     // Pushes a local order to the "Global" store
     pushOrderToCloud: (order: OrderItem) => {
         try {
-            const globalOrders = JSON.parse(localStorage.getItem(CLOUD_ORDERS_KEY) || '[]');
-            // Avoid duplicates by checking ID or KodeBarang
+            const globalOrders: OrderItem[] = JSON.parse(localStorage.getItem(CLOUD_ORDERS_KEY) || '[]');
             const exists = globalOrders.find((o: OrderItem) => o.id === order.id);
             if (!exists) {
-                // We only push non-deleted orders to the cloud
                 if (!order.deletedAt) {
                     globalOrders.push(order);
                     localStorage.setItem(CLOUD_ORDERS_KEY, JSON.stringify(globalOrders));
+
+                    // Broadcast notification
+                    const notif = {
+                        id: Math.random().toString(36).substr(2, 9),
+                        sender: order.namaPenjahit,
+                        kode: order.kodeBarang,
+                        timestamp: new Date().toISOString()
+                    };
+                    localStorage.setItem(GLOBAL_NOTIF_KEY, JSON.stringify(notif));
+                    window.dispatchEvent(new Event('storage'));
                 }
             }
         } catch (e) {
             console.error("Sync Error:", e);
+        }
+    },
+
+    // Check if code exists globally
+    checkDuplicateCode: (kode: string): OrderItem | null => {
+        try {
+            const globalOrders: OrderItem[] = JSON.parse(localStorage.getItem(CLOUD_ORDERS_KEY) || '[]');
+            return globalOrders.find(o => o.kodeBarang === kode && !o.deletedAt) || null;
+        } catch (e) {
+            return null;
         }
     },
 
@@ -47,7 +66,6 @@ export const syncService = {
             const chatHistory = JSON.parse(localStorage.getItem(CLOUD_CHAT_KEY) || '[]');
             chatHistory.push(msg);
             localStorage.setItem(CLOUD_CHAT_KEY, JSON.stringify(chatHistory));
-            // Notify other tabs/windows in same browser (useful for testing)
             window.dispatchEvent(new Event('storage'));
         } catch (e) {
             console.error("Chat Error:", e);

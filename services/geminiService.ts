@@ -2,9 +2,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export const extractOrderData = async (base64Image: string) => {
+  const DEFAULT_KEY = 'AIzaSyBqDDY1x9hYJmvb3AFwynxYJ5cGvmmJLTE';
   // Ambil API Key dari localStorage jika ada, jika tidak gunakan sistem
   const userApiKey = localStorage.getItem('bradwear_gemini_key');
-  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY || DEFAULT_KEY });
 
   try {
     const response = await ai.models.generateContent({
@@ -33,7 +34,7 @@ export const extractOrderData = async (base64Image: string) => {
             - RINCIAN ITEM (sizeDetails):
               * size: (S, M, L, XL, etc. or numeric 28-40)
               * jumlah: (integer)
-              * gender: Identify 'Pria' (Cowok/Laki-laki) or 'Wanita' (Cewek/Perempuan).
+              * gender: MUST be either 'Pria' or 'Wanita'. (Note: Laki-laki/Cowok = Pria, Perempuan/Cewek = Wanita)
               * tangan: Identify 'Panjang' (Long) or 'Pendek' (Short).
               * CRITICAL: For each item row, check if there is a tailor name from the TAILOR NAMES LIST.
               
@@ -83,7 +84,42 @@ export const extractOrderData = async (base64Image: string) => {
       }
     });
 
-    return JSON.parse(response.text || '{}');
+    const result = JSON.parse(response.text || '{}');
+
+    // NORMALIZE GENDER
+    if (result.sizeDetails && Array.isArray(result.sizeDetails)) {
+      result.sizeDetails = result.sizeDetails.map((item: any) => {
+        let gender = item.gender || 'Pria';
+        const gLower = gender.toLowerCase();
+
+        if (gLower.includes('laki') || gLower === 'pria' || gLower === 'cowok' || gLower === 'l' || gLower === 'p') {
+          // Note: sometimes P can mean Pria if W is Wanita, but often P means Perempuan.
+          // However, we look at the specific request: "perempuan berarti wanita dan pria berarti laki-laki"
+          // Let's be careful with 'p' and 'w'.
+          if (gLower === 'p' && !gLower.includes('pria')) {
+            // usually P = Perempuan in Indo forms.
+          }
+        }
+
+        // Refined Logic based on user request "perempuan berarti wanita dan pria berarti laki-laki"
+        if (gLower.includes('perempuan') || gLower.includes('wanita') || gLower === 'cewek' || gLower === 'w') {
+          gender = 'Wanita';
+        } else if (gLower.includes('laki') || gLower.includes('pria') || gLower === 'cowok' || gLower === 'l') {
+          gender = 'Pria';
+        } else if (gLower === 'p') {
+          // If gender is just 'p', in Indonesia it often means Perempuan.
+          // But if it's 'pria', it contains 'p'.
+          // The previous includes('pria') already handled it.
+          gender = 'Wanita'; // Assume P = Perempuan if not Pria
+        } else {
+          gender = 'Pria'; // Default
+        }
+
+        return { ...item, gender };
+      });
+    }
+
+    return result;
   } catch (error) {
     console.error("AI Extraction Error:", error);
     throw error;
@@ -91,8 +127,9 @@ export const extractOrderData = async (base64Image: string) => {
 };
 
 export const extractSplitData = async (base64Images: string[]) => {
+  const DEFAULT_KEY = 'AIzaSyBqDDY1x9hYJmvb3AFwynxYJ5cGvmmJLTE';
   const userApiKey = localStorage.getItem('bradwear_gemini_key');
-  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.API_KEY || DEFAULT_KEY });
 
   try {
     const parts = base64Images.map(img => ({
