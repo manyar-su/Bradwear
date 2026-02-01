@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Lock, Shield, Flame, PlusCircle, Layers, DollarSign, History, BarChart2 } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, addDays, isBefore, startOfDay } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { syncService } from '../services/syncService';
 
@@ -119,6 +119,112 @@ const DetailRow = ({ icon, label, value, subValue, isDarkMode, isLongText, onCli
     {onClick && <ChevronRight size={14} className="text-slate-300 self-center" />}
   </div>
 );
+const Calendar3D = ({ orders, isDarkMode }: { orders: OrderItem[], isDarkMode: boolean }) => {
+  const today = startOfDay(new Date());
+  const monthStart = startOfMonth(today);
+  const monthEnd = endOfMonth(today);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  const startDay = getDay(monthStart);
+  const blanks = Array(startDay).fill(null);
+
+  const getOrdersForDay = (date: Date) => {
+    return orders.filter(o => {
+      const targetDate = parseIndoDate(o.tanggalTargetSelesai);
+      return targetDate && isSameDay(targetDate, date) && o.status !== JobStatus.BERES;
+    });
+  };
+
+  const getDayStatusColor = (date: Date, dayOrders: OrderItem[]) => {
+    if (dayOrders.length === 0) return '';
+
+    const isLate = dayOrders.some(o => {
+      const targetDate = parseIndoDate(o.tanggalTargetSelesai);
+      return targetDate && isBefore(targetDate, today);
+    });
+
+    if (isLate) return 'bg-red-500 shadow-lg shadow-red-500/40 text-white';
+
+    const daysLeft = differenceInDays(date, today);
+    if (daysLeft <= 1) return 'bg-orange-500 shadow-lg shadow-orange-500/40 text-white';
+    if (daysLeft <= 3) return 'bg-amber-400 shadow-lg shadow-amber-400/40 text-white';
+    return 'bg-emerald-500 shadow-lg shadow-emerald-500/40 text-white';
+  };
+
+  return (
+    <div className={`w-full max-w-sm p-6 rounded-[2.5rem] border shadow-2xl relative overflow-hidden transition-all duration-500 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`} style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-xl ${isDarkMode ? 'bg-slate-900' : 'bg-emerald-50'}`}>
+            <Calendar className="text-emerald-500" size={20} />
+          </div>
+          <h4 className={`text-sm font-black uppercase tracking-widest ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+            {format(today, 'MMMM yyyy', { locale: idLocale })}
+          </h4>
+        </div>
+        <div className="flex gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-2 mb-2">
+        {['S', 'S', 'R', 'K', 'J', 'S', 'M'].map((d, i) => (
+          <div key={i} className="text-[8px] font-black text-slate-400 text-center uppercase tracking-tighter">{d}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-2">
+        {blanks.map((_, i) => <div key={`blank-${i}`} />)}
+        {days.map((day, i) => {
+          const dayOrders = getOrdersForDay(day);
+          const colorClass = getDayStatusColor(day, dayOrders);
+          const isToday = isSameDay(day, today);
+
+          return (
+            <div
+              key={i}
+              className={`relative flex flex-col items-center justify-center p-1.5 rounded-xl transition-all duration-300 group ${colorClass ? 'scale-105 z-10' : isDarkMode ? 'bg-slate-900/50 hover:bg-slate-900' : 'bg-slate-50 hover:bg-slate-100'} ${isToday ? 'border-2 border-emerald-500/50 ring-2 ring-emerald-500/10' : ''}`}
+              style={{ transform: colorClass ? 'translateZ(10px)' : 'none' }}
+            >
+              <span className={`text-[10px] font-black ${colorClass ? 'text-white' : isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                {format(day, 'd')}
+              </span>
+
+              {dayOrders.length > 0 && (
+                <div className="mt-1 flex flex-col items-center">
+                  <span className={`text-[6px] font-black leading-none ${colorClass ? 'text-white/80' : 'text-emerald-500'}`}>
+                    {dayOrders[0].kodeBarang.slice(-4)}
+                  </span>
+                  {dayOrders.length > 1 && (
+                    <div className="w-1 h-1 rounded-full bg-white/50 mt-0.5" />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-slate-100/10 flex justify-between items-center">
+        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+          {orders.filter(o => o.status !== JobStatus.BERES).length} Pekerjaan Berjalan
+        </p>
+        <div className="flex gap-3">
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm shadow-red-500/50" />
+            <span className="text-[7px] font-black text-slate-400 uppercase">Telat</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-sm shadow-orange-500/50" />
+            <span className="text-[7px] font-black text-slate-400 uppercase">Red</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQuery, isDarkMode, onViewHistory, toggleDarkMode, onScanClick, onUpdateStatus, onUpdateOrder }) => {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -363,6 +469,8 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           </div>
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl" />
         </div>
+
+        <Calendar3D orders={orders} isDarkMode={isDarkMode} />
 
         <div className="w-full max-w-sm overflow-hidden relative py-1 rounded-full border border-dashed border-slate-300">
           <div className="flex animate-[marquee_25s_linear_infinite] whitespace-nowrap">
