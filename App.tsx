@@ -276,8 +276,8 @@ const App: React.FC = () => {
     setScanResult(null);
     setActiveView('HISTORY');
 
-    // Real-time synchronization to global store
-    syncService.pushOrderToCloud(finalizedOrder);
+    // Real-time synchronization to global store (Supabase)
+    syncService.pushOrderToCloud(finalizedOrder).catch(e => console.error('Sync failed:', e));
 
     if (finalizedOrder.createCalendarReminder && finalizedOrder.tanggalTargetSelesai) {
       createCalendarReminder(finalizedOrder);

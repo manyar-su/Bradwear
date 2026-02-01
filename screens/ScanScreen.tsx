@@ -95,23 +95,27 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   }, [scanResultGlobal]);
 
   useEffect(() => {
-    if (formData.kodeBarang) {
-      // Local check
-      const localDup = existingOrders.find(o => o.kodeBarang === formData.kodeBarang);
-      // Global check
-      const globalDup = syncService.checkDuplicateCode(formData.kodeBarang);
+    const checkDuplicate = async () => {
+      if (formData.kodeBarang) {
+        // Local check
+        const localDup = existingOrders.find(o => o.kodeBarang === formData.kodeBarang);
+        // Global check (async)
+        const globalDup = await syncService.checkDuplicateCode(formData.kodeBarang);
 
-      if (localDup || globalDup) {
-        setShowDuplicateWarning(true);
-        setDuplicateOwner((globalDup?.namaPenjahit || localDup?.namaPenjahit || null));
+        if (localDup || globalDup) {
+          setShowDuplicateWarning(true);
+          setDuplicateOwner((globalDup?.namaPenjahit || localDup?.namaPenjahit || null));
+        } else {
+          setShowDuplicateWarning(false);
+          setDuplicateOwner(null);
+        }
       } else {
         setShowDuplicateWarning(false);
         setDuplicateOwner(null);
       }
-    } else {
-      setShowDuplicateWarning(false);
-      setDuplicateOwner(null);
-    }
+    };
+
+    checkDuplicate();
   }, [formData.kodeBarang, existingOrders]);
 
   useEffect(() => {
