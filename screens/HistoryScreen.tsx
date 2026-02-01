@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter, CloudUpload, Globe } from 'lucide-react';
+import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter, CloudUpload, Globe, Edit3 } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
 import { syncService } from '../services/syncService';
 // Fixed: Removed parseISO from date-fns imports as it's not exported or redundant for ISO strings
@@ -11,6 +11,7 @@ interface HistoryScreenProps {
   orders: OrderItem[];
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: JobStatus) => void;
+  onEdit: (order: OrderItem) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   isDarkMode: boolean;
@@ -22,7 +23,7 @@ const isValidDate = (date: any): date is Date => {
   return date instanceof Date && !isNaN(date.getTime());
 };
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdateStatus, searchQuery, setSearchQuery, isDarkMode }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdateStatus, onEdit, searchQuery, setSearchQuery, isDarkMode }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterMode, setFilterMode] = useState<FilterMode>('SEMUA');
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderItem | null>(null);
@@ -390,6 +391,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
                     {order.status}
                   </button>
                   <div className="flex gap-2">
+                    <button onClick={() => onEdit(order)} className="p-2.5 text-slate-400 hover:text-emerald-500 transition-colors" title="Edit Data"><Edit3 size={18} /></button>
                     <button onClick={() => setSelectedOrderDetails(order)} className="p-2.5 text-slate-400 hover:text-blue-500 transition-colors"><Info size={18} /></button>
                     <button onClick={() => onDelete(order.id)} className="p-2.5 text-slate-400 hover:text-red-500 transition-colors">
                       <Trash2 size={18} strokeWidth={2.5} />

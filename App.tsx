@@ -259,22 +259,37 @@ const App: React.FC = () => {
   };
 
   const handleAddOrder = (newOrder: OrderItem) => {
-    const finalizedOrder: OrderItem = {
-      ...newOrder,
-      id: newOrder.id || Math.random().toString(36).substr(2, 9),
-      createdAt: newOrder.createdAt || new Date().toISOString()
-    };
+    const isEditing = orders.some(o => o.id === newOrder.id);
 
-    setOrders([finalizedOrder, ...orders]);
+    if (isEditing) {
+      setOrders(orders.map(o => o.id === newOrder.id ? newOrder : o));
+    } else {
+      const finalizedOrder: OrderItem = {
+        ...newOrder,
+        id: newOrder.id || Math.random().toString(36).substr(2, 9),
+        createdAt: newOrder.createdAt || new Date().toISOString()
+      };
+      setOrders([finalizedOrder, ...orders]);
+
+      if (finalizedOrder.createCalendarReminder && finalizedOrder.tanggalTargetSelesai) {
+        createCalendarReminder(finalizedOrder);
+      }
+
+      // Real-time synchronization to global store (Supabase)
+      syncService.pushOrderToCloud(finalizedOrder).catch(e => console.error('Sync failed:', e));
+    }
+
     setScanResult(null);
     setActiveView('HISTORY');
 
-    // Real-time synchronization to global store (Supabase)
-    syncService.pushOrderToCloud(finalizedOrder).catch(e => console.error('Sync failed:', e));
-
-    if (finalizedOrder.createCalendarReminder && finalizedOrder.tanggalTargetSelesai) {
-      createCalendarReminder(finalizedOrder);
+    if (isEditing) {
+      syncService.pushOrderToCloud(newOrder).catch(e => console.error('Update Sync failed:', e));
     }
+  };
+
+  const handleEditFromHistory = (order: OrderItem) => {
+    setScanResult(order);
+    setActiveView('SCAN');
   };
 
   const createCalendarReminder = async (order: OrderItem) => {
@@ -524,6 +539,7 @@ const App: React.FC = () => {
           orders={activeOrders}
           onDelete={handleDeleteOrder}
           onUpdateStatus={handleUpdateStatus}
+          onEdit={handleEditFromHistory}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           isDarkMode={isDarkMode}
