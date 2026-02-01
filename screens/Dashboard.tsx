@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Flame, PlusCircle, Layers, DollarSign, History, BarChart2 } from 'lucide-react';
+import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Lock, Shield, Flame, PlusCircle, Layers, DollarSign, History, BarChart2 } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -129,6 +129,8 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
 
   const activeOnly = useMemo(() => orders.filter(o => !o.deletedAt), [orders]);
 
+  const profileName = useMemo(() => localStorage.getItem('profileName') || 'Nama Anda', []);
+
   useEffect(() => {
     const searchGlobal = async () => {
       if (localSearch.length >= 2) {
@@ -194,21 +196,29 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
     return { lateReminders: late, upcomingReminders: upcoming };
   }, [orders]);
 
+  const isOwner = useMemo(() => {
+    if (!selectedOrder) return false;
+    return selectedOrder.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim();
+  }, [selectedOrder, profileName]);
+
   const handleToggleStatus = () => {
-    if (selectedOrder && onUpdateStatus) {
-      const nextStatus = selectedOrder.status === JobStatus.BERES ? JobStatus.PROSES : JobStatus.BERES;
-      onUpdateStatus(selectedOrder.id, nextStatus);
+    if (!selectedOrder || !onUpdateStatus) return;
+    if (!isOwner) {
+      alert(`Hanya ${selectedOrder.namaPenjahit} yang bisa merubah status order ini.`);
+      return;
     }
+    const nextStatus = selectedOrder.status === JobStatus.BERES ? JobStatus.PROSES : JobStatus.BERES;
+    onUpdateStatus(selectedOrder.id, nextStatus);
   };
 
   const handleToggleEmbroidery = () => {
-    if (selectedOrder && onUpdateOrder) {
-      const nextStatus = selectedOrder.embroideryStatus === 'Kurang' ? 'Lengkap' : 'Kurang';
-      onUpdateOrder({
-        ...selectedOrder,
-        embroideryStatus: nextStatus as 'Lengkap' | 'Kurang'
-      });
+    if (!selectedOrder || !onUpdateOrder) return;
+    if (!isOwner) {
+      alert(`Hanya ${selectedOrder.namaPenjahit} yang bisa merubah rincian order ini.`);
+      return;
     }
+    const nextStatus = selectedOrder.embroideryStatus === 'Kurang' ? 'Lengkap' : 'Kurang';
+    onUpdateOrder({ ...selectedOrder, embroideryStatus: nextStatus as 'Lengkap' | 'Kurang' });
   };
 
   return (
@@ -231,11 +241,19 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
 
                 <button
                   onClick={handleToggleStatus}
-                  className={`px-8 py-2.5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all active:scale-95 flex items-center gap-2 border-2 ${selectedOrder.status === JobStatus.BERES ? 'bg-emerald-500 border-emerald-400 shadow-emerald-500/20' : 'bg-[#ef4444] border-red-400 shadow-red-500/20'} text-white`}
+                  className={`px-8 py-2.5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all active:scale-95 flex items-center gap-2 border-2 ${!isOwner ? 'opacity-70 grayscale' : ''} ${selectedOrder.status === JobStatus.BERES ? 'bg-emerald-500 border-emerald-400 shadow-emerald-500/20' : 'bg-[#ef4444] border-red-400 shadow-red-500/20'} text-white`}
                 >
+                  {!isOwner && <Lock size={10} />}
                   <div className={`w-2 h-2 rounded-full bg-white ${selectedOrder.status === JobStatus.PROSES ? 'animate-pulse' : ''}`} />
                   {selectedOrder.status === JobStatus.BERES ? 'Pekerjaan Selesai' : 'Sedang Diproses'}
                 </button>
+
+                {!isOwner && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                    <Shield size={10} className="text-amber-500" />
+                    <span className="text-[8px] font-black text-amber-500 uppercase tracking-wider">Hanya Bisa Dilihat (Milik {selectedOrder.namaPenjahit})</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4">
@@ -265,7 +283,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                   value={selectedOrder.embroideryStatus || 'Lengkap'}
                   subValue={selectedOrder.embroideryNotes}
                   isDarkMode={isDarkMode}
-                  className={selectedOrder.embroideryStatus === 'Kurang' ? 'border-red-200 bg-red-50/10' : ''}
+                  className={`${selectedOrder.embroideryStatus === 'Kurang' ? 'border-red-200 bg-red-50/10' : ''} ${!isOwner ? 'cursor-not-allowed opacity-80' : ''}`}
                 />
 
                 <DetailRow
@@ -427,7 +445,9 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                         <p className={`text-xs font-black uppercase truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{order.kodeBarang}</p>
                         <div className="flex items-center gap-2">
                           <p className="text-[9px] font-bold text-slate-400 uppercase truncate">PJ: {order.namaPenjahit}</p>
-                          <span className="bg-blue-500 text-white text-[6px] font-black px-1 py-0.5 rounded-full uppercase tracking-tighter">Global</span>
+                          <span className={`text-white text-[6px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter ${order.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim() ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                            {order.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim() ? 'Milik Anda' : 'Public'}
+                          </span>
                         </div>
                       </div>
                       <ChevronRight size={14} className="text-slate-300" />

@@ -173,18 +173,37 @@ export const supabaseService = {
     },
 
     async upsertOrder(order: Omit<OrderDB, 'id' | 'created_at' | 'updated_at'>): Promise<OrderDB | null> {
-        const { data, error } = await supabase
-            .from('orders')
-            .upsert([{ ...order, updated_at: new Date().toISOString() }],
-                { onConflict: 'kode_barang' })
-            .select()
-            .single();
+        try {
+            // First check if order exists with this kode_barang
+            const { data: existing } = await supabase
+                .from('orders')
+                .select('nama_penjahit')
+                .eq('kode_barang', order.kode_barang)
+                .is('deleted_at', null)
+                .maybeSingle();
 
-        if (error) {
-            console.error('Error upserting order:', error);
+            if (existing && existing.nama_penjahit !== order.nama_penjahit) {
+                console.warn(`Unauthorized update attempt for ${order.kode_barang} by ${order.nama_penjahit}. Owner is ${existing.nama_penjahit}`);
+                alert(`Gagal Update: Kode barang ${order.kode_barang} sudah terdaftar atas nama ${existing.nama_penjahit}. Hanya dia yang bisa merubah keterangan.`);
+                return null;
+            }
+
+            const { data, error } = await supabase
+                .from('orders')
+                .upsert([{ ...order, updated_at: new Date().toISOString() }],
+                    { onConflict: 'kode_barang' })
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Error upserting order:', error);
+                return null;
+            }
+            return data;
+        } catch (e) {
+            console.error('Upsert exception:', e);
             return null;
         }
-        return data;
     },
 
     subscribeToOrders(callback: () => void): RealtimeChannel {
