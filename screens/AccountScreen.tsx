@@ -108,20 +108,40 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     setTimeout(() => setShowSuccessToast(false), 3000);
   };
 
-  const handleGoogleLogin = () => {
-    setLoading(true);
-    setTimeout(() => {
+  const [loginPin, setLoginPin] = useState('');
+  const [storedPin, setStoredPin] = useState(() => localStorage.getItem('bradflow_pin') || '');
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+
+  const handleLogin = () => {
+    if (pinInput === storedPin) {
       setIsLoggedIn(true);
-      setLoading(false);
-      setIsSyncing(true);
-      setTimeout(() => setIsSyncing(false), 2000);
-    }, 1500);
+      setPinInput('');
+    } else {
+      alert("PIN Salah! Coba lagi.");
+      setPinInput('');
+    }
+  };
+
+  const handleSetPin = () => {
+    if (pinInput.length < 4) {
+      alert("PIN minimal 4 angka!");
+      return;
+    }
+    localStorage.setItem('bradflow_pin', pinInput);
+    setStoredPin(pinInput);
+    setIsLoggedIn(true);
+    setPinInput('');
+    setShowPinSetup(false);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
   };
 
   const handleExitApp = () => {
-    if (confirm("Simpan data dan keluar?")) {
+    if (confirm("Keluar dari akun Anda?")) {
       setIsLoggedIn(false);
-      window.location.href = "about:blank";
     }
   };
 
@@ -385,43 +405,88 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
           </div>
           <div className="text-center w-full px-10">
             {isEditingName ? <input autoFocus className={`w-full text-xl font-black text-center bg-transparent border-b-2 focus:outline-none transition-colors ${isDarkMode ? 'text-white border-slate-700 focus:border-[#10b981]' : 'text-[#334155] border-slate-200 focus:border-[#10b981]'}`} value={profileName} onChange={(e) => setProfileName(e.target.value)} onBlur={() => setIsEditingName(false)} onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)} /> : <div className="flex items-center justify-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}><h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-[#334155]'}`}>{profileName}</h2><Edit2 size={14} className="text-slate-300 opacity-0 group-hover:opacity-100" /></div>}
-            <div className="mt-4 flex flex-col items-center gap-2">
-              {!isLoggedIn ? <button onClick={handleGoogleLogin} className={`w-40 border-2 py-2.5 rounded-xl flex items-center justify-center gap-3 transition-all active:scale-95 border-[#7c9cfc] text-[#7c9cfc] hover:bg-blue-50/50`}>{loading ? <Loader2 className="animate-spin" size={16} /> : <><Cloud size={16} fill="currentColor" /> <span className="text-[10px] font-black uppercase tracking-widest">Login Google</span></>}</button> : <div className="flex flex-col items-center gap-1"><div className="flex items-center gap-2 bg-[#e6f7ef] px-4 py-1.5 rounded-full border border-[#10b981]/20"><Cloud className="text-[#10b981]" size={14} /><span className="text-[10px] font-black text-[#10b981] uppercase tracking-widest">{isSyncing ? 'Syncing...' : 'G-Drive Active'}</span></div></div>}
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 bg-[#e6f7ef] px-4 py-1.5 rounded-full border border-[#10b981]/20">
+                <Cloud className="text-[#10b981]" size={14} />
+                <span className="text-[10px] font-black text-[#10b981] uppercase tracking-widest">{isLoggedIn ? 'Online' : 'Offline Mode'}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Menu Sections */}
-        <div className="space-y-6">
-          <div>
-            <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Produksi</h5>
-            <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
-              <MenuItem icon={<Layers className="text-[#10b981]" />} label="Pecah Rata " isDarkMode={isDarkMode} onClick={() => setShowSplitPopup(true)} />
-              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
-              <MenuItem icon={<DollarSign className="text-amber-500" />} label="Daftar Harga" isDarkMode={isDarkMode} onClick={() => setShowPricePopup(true)} />
-              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
-              <MenuItem icon={<Scissors className="text-blue-500" />} label="Manajemen Bordir" isDarkMode={isDarkMode} onClick={() => setShowEmbroideryPopup(true)} badge="Check" />
+        {/* Login / Setup PIN Overlay */}
+        {!isLoggedIn && (
+          <div className="flex-1 flex flex-col items-center justify-center py-12 space-y-8 animate-in zoom-in duration-500">
+            <div className="w-24 h-24 bg-emerald-500 text-white rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-emerald-500/20">
+              <Key size={40} />
             </div>
-          </div>
 
-          <div>
-            <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Sistem</h5>
-            <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
-              <MenuItem icon={<Key className="text-amber-600" />} label="API KEY Management" isDarkMode={isDarkMode} onClick={() => setShowApiKeyPopup(true)} badge="NEW" />
-              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
-              <MenuItem icon={<Info className="text-blue-500" />} label="Laporan Bulanan" isDarkMode={isDarkMode} onClick={() => setShowReportPopup(true)} badge="AI" />
-              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
-              <MenuItem icon={<Trash2 className="text-red-500" />} label="Tempat Sampah" isDarkMode={isDarkMode} onClick={() => setShowRecyclePopup(true)} badge={deletedOrders.length.toString()} />
-              <div className="h-[1px] mx-4 bg-[#f8fafc]" />
-              <MenuItem icon={<Code2 className="text-[#10b981]" />} label="Informasi Pembuat" isDarkMode={isDarkMode} onClick={() => setShowInfoPopup(true)} />
+            <div className="text-center space-y-2">
+              <h3 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                {storedPin ? 'Masukkan PIN' : 'Setel PIN Keamanan'}
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                {storedPin ? 'Gunakan PIN 4 Digit Anda' : 'Buat PIN untuk mengunci akses akun'}
+              </p>
             </div>
-          </div>
 
-          <button onClick={handleExitApp} className="w-full p-4 rounded-3xl bg-red-50 text-red-500 flex items-center justify-between active:scale-95 transition-all border border-red-100 shadow-sm">
-            <div className="flex items-center gap-4"><div className="p-2 bg-white rounded-xl shadow-sm"><LogOut size={20} /></div><span className="font-black uppercase text-[11px] tracking-widest">Keluar Aplikasi</span></div>
-            <ChevronRight size={18} />
-          </button>
-        </div>
+            <div className="w-full max-w-[240px] space-y-4">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
+                className={`w-full text-center py-5 text-2xl font-black rounded-[2rem] border-2 transition-all outline-none tracking-[0.5em] ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-emerald-500' : 'bg-white border-slate-100 focus:border-emerald-500 shadow-sm'}`}
+              />
+
+              <button
+                onClick={storedPin ? handleLogin : handleSetPin}
+                className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+              >
+                {storedPin ? 'Masuk' : 'Simpan & Aktifkan'}
+              </button>
+            </div>
+
+            {storedPin && (
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Lupa PIN? Hubungi Pembuat Aplikasi</p>
+            )}
+          </div>
+        )}
+
+        {isLoggedIn && (
+          <div className="space-y-6">
+            <div>
+              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Produksi</h5>
+              <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
+                <MenuItem icon={<Layers className="text-[#10b981]" />} label="Pecah Rata " isDarkMode={isDarkMode} onClick={() => setShowSplitPopup(true)} />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<DollarSign className="text-amber-500" />} label="Daftar Harga" isDarkMode={isDarkMode} onClick={() => setShowPricePopup(true)} />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<Scissors className="text-blue-500" />} label="Manajemen Bordir" isDarkMode={isDarkMode} onClick={() => setShowEmbroideryPopup(true)} badge="Check" />
+              </div>
+            </div>
+
+            <div>
+              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Sistem</h5>
+              <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
+                <MenuItem icon={<Key className="text-amber-600" />} label="API KEY Management" isDarkMode={isDarkMode} onClick={() => setShowApiKeyPopup(true)} badge="NEW" />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<Info className="text-blue-500" />} label="Laporan Bulanan" isDarkMode={isDarkMode} onClick={() => setShowReportPopup(true)} badge="AI" />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<Trash2 className="text-red-500" />} label="Tempat Sampah" isDarkMode={isDarkMode} onClick={() => setShowRecyclePopup(true)} badge={deletedOrders.length.toString()} />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<Code2 className="text-[#10b981]" />} label="Informasi Pembuat" isDarkMode={isDarkMode} onClick={() => setShowInfoPopup(true)} />
+              </div>
+            </div>
+
+            <button onClick={handleExitApp} className="w-full p-4 rounded-3xl bg-red-50 text-red-500 flex items-center justify-between active:scale-95 transition-all border border-red-100 shadow-sm">
+              <div className="flex items-center gap-4"><div className="p-2 bg-white rounded-xl shadow-sm"><LogOut size={20} /></div><span className="font-black uppercase text-[11px] tracking-widest">Keluar Akun</span></div>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* API KEY POPUP */}

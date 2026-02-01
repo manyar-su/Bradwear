@@ -79,14 +79,16 @@ const App: React.FC = () => {
     if (savedPending) setScanResult(JSON.parse(savedPending));
 
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'bradwear_global_notif') {
+      if (e.key === 'bradwear_global_notif' && e.newValue) {
         try {
-          const notif = JSON.parse(e.newValue || '{}');
-          const profileName = localStorage.getItem('profileName') || 'Nama Anda';
-          // Only show if sender is NOT me
-          if (notif.sender !== profileName) {
-            setGlobalNotification(notif);
-            setTimeout(() => setGlobalNotification(null), 5000);
+          const notif = JSON.parse(e.newValue);
+          if (notif && notif.sender && notif.kode) {
+            const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+            // Only show if sender is NOT me
+            if (notif.sender !== profileName) {
+              setGlobalNotification(notif);
+              setTimeout(() => setGlobalNotification(null), 5000);
+            }
           }
         } catch { }
       }
@@ -164,6 +166,14 @@ const App: React.FC = () => {
     isScanningRef.current = true;
     setShowScanMethodPopup(false);
     const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+
+    const apiKey = localStorage.getItem('bradwear_gemini_key');
+    if (!apiKey) {
+      alert("⚠️ API KEY TIDAK DITEMUKAN!\n\nFitur scan memerlukan Gemini API Key. Silakan isi API Key di menu 'Account' atau tanyakan ke pembuat aplikasi (Maris).");
+      setIsScanning(false);
+      isScanningRef.current = false;
+      return;
+    }
 
     try {
       const extracted = await extractOrderData(base64);
