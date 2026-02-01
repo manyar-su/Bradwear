@@ -66,6 +66,11 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+    setFormData(prev => ({ ...prev, namaPenjahit: profileName }));
+  }, []);
+
+  useEffect(() => {
     if (descriptionRef.current) {
       descriptionRef.current.style.height = 'auto';
       descriptionRef.current.style.height = `${descriptionRef.current.scrollHeight}px`;

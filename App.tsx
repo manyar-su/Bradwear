@@ -12,6 +12,7 @@ import { differenceInDays, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { extractOrderData } from './services/geminiService';
 import { syncService } from './services/syncService';
+import { notificationService } from './services/notificationService';
 import { Camera, Upload, X, FileText, Loader2, Keyboard, AlertTriangle, ChevronRight, LogOut, MessageSquare, Sparkles } from 'lucide-react';
 // Capacitor plugins will be accessed dynamically to avoid build issues if not installed
 
@@ -96,6 +97,9 @@ const App: React.FC = () => {
       Notification.requestPermission();
     }
 
+    // Initialize push notification service
+    notificationService.init().catch(e => console.log('Notification init skipped:', e));
+
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
@@ -108,7 +112,8 @@ const App: React.FC = () => {
       localStorage.removeItem('pending_scan_result');
     }
 
-    checkUpcomingDeadlines(orders);
+    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+    notificationService.checkAndNotify(orders, profileName).catch(e => console.log('Deadline check failed:', e));
   }, [orders, isDarkMode, scanResult]);
 
   useEffect(() => {
@@ -142,38 +147,7 @@ const App: React.FC = () => {
     };
   }, [activeView, lastBackPress]);
 
-  const checkUpcomingDeadlines = async (allOrders: OrderItem[]) => {
-    const CapLocalNotifications = (window as any).Capacitor?.Plugins?.LocalNotifications;
-    if (!CapLocalNotifications) return;
 
-    const hasPermission = await CapLocalNotifications.checkPermissions();
-    if (hasPermission.display !== 'granted') return;
-
-    allOrders.forEach(async (order) => {
-      if (order.status === JobStatus.PROSES && !order.deletedAt) {
-        const targetDate = parseIndoDate(order.tanggalTargetSelesai);
-        if (targetDate) {
-          const daysLeft = differenceInDays(targetDate, new Date());
-          if (daysLeft === 1) {
-            // Schedule local notification with sound
-            await CapLocalNotifications.schedule({
-              notifications: [
-                {
-                  title: "BradwearFlow: Target Besok!",
-                  body: `Order ${order.kodeBarang} (${order.model}) harus beres besok!`,
-                  id: parseInt(order.kodeBarang) || Math.floor(Math.random() * 10000),
-                  schedule: { at: new Date(Date.now() + 1000) }, // Trigger soon if condition met
-                  sound: 'default',
-                  actionTypeId: "",
-                  extra: null
-                }
-              ]
-            });
-          }
-        }
-      }
-    });
-  };
 
   useEffect(() => {
     let interval: any;
