@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter } from 'lucide-react';
+import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter, CloudUpload, Globe } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
+import { syncService } from '../services/syncService';
 // Fixed: Removed parseISO from date-fns imports as it's not exported or redundant for ISO strings
 import { differenceInDays, format, isSameWeek, isSameMonth, isSameYear } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -114,6 +115,41 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const handleShareToPublic = async () => {
+    const selected = orders.filter(o => selectedIds.has(o.id));
+    if (selected.length === 0) {
+      alert("Pilih minimal 1 order untuk dibagikan ke publik.");
+      return;
+    }
+
+    const confirmShare = window.confirm(
+      `Anda akan membagikan ${selected.length} kode barang ke publik.\n\nSetelah dibagikan, semua pengguna aplikasi dapat mencari dan melihat rincian order ini.\n\nLanjutkan?`
+    );
+
+    if (!confirmShare) return;
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const order of selected) {
+      try {
+        await syncService.pushOrderToCloud(order);
+        successCount++;
+      } catch (e) {
+        console.error(`Failed to share order ${order.kodeBarang}:`, e);
+        failCount++;
+      }
+    }
+
+    if (failCount === 0) {
+      alert(`✅ Berhasil membagikan ${successCount} kode barang ke publik!\n\nSekarang semua pengguna dapat mencari kode ini di search box.`);
+    } else {
+      alert(`⚠️ ${successCount} berhasil, ${failCount} gagal dibagikan.\n\nCoba lagi untuk yang gagal.`);
+    }
+
+    setSelectedIds(new Set());
+  };
+
   const getUrgencyStyles = (days: number) => {
     if (days < 0) return 'bg-slate-900 text-white border-slate-800 shadow-lg';
     if (days <= 2) return 'bg-red-500 text-white border-red-400 shadow-[0_10px_20px_rgba(239,68,68,0.2)]';
@@ -156,6 +192,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
         <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>History Kerja</h2>
         {selectedIds.size > 0 && (
           <div className="flex gap-2 animate-in slide-in-from-right">
+            <button
+              onClick={handleShareToPublic}
+              className="p-3 bg-blue-500 text-white rounded-2xl shadow-xl shadow-blue-500/20 active:scale-90"
+              title="Bagikan ke Publik"
+            >
+              <Globe size={18} />
+            </button>
             <button onClick={handleShareWhatsApp} className="p-3 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-500/20 active:scale-90"><Send size={18} /></button>
             <button className="p-3 bg-slate-800 text-white rounded-2xl shadow-xl active:scale-90"><FileText size={18} /></button>
           </div>

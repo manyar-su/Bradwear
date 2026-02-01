@@ -239,10 +239,19 @@ const App: React.FC = () => {
         setScanResult(result);
         setActiveView('SCAN');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Scan error:", err);
       if (isScanningRef.current) {
-        alert("Gagal membaca foto. Pastikan teks rekapan terlihat jelas dan coba lagi.");
+        const errorMsg = err?.message || err?.toString() || 'Unknown error';
+        if (errorMsg.includes('API_KEY') || errorMsg.includes('401') || errorMsg.includes('403')) {
+          alert("Error API Key: Silakan cek API Key Gemini di menu Account atau gunakan key yang valid.");
+        } else if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('Failed to fetch')) {
+          alert("Gagal terhubung ke server. Periksa koneksi internet Anda.");
+        } else if (errorMsg.includes('quota') || errorMsg.includes('429')) {
+          alert("Batas penggunaan API tercapai. Coba lagi nanti atau gunakan API Key pribadi.");
+        } else {
+          alert(`Gagal membaca foto: ${errorMsg}\n\nPastikan teks rekapan terlihat jelas dan coba lagi.`);
+        }
       }
     } finally {
       setIsScanning(false);
