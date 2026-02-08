@@ -39,6 +39,7 @@ export const extractOrderData = async (base64Image: string) => {
               * CRITICAL: For each item row, check if there is a tailor name from the TAILOR NAMES LIST.
               
             - Identify 'model', 'warna', 'sakuType', 'sakuColor'.
+            - MODELS LIST: ["Brad V1", "Brad V2", "Brad V3", "Yoroi", "PDH", "PDH Baru", "Ventura", "Rompi", "Celana"]
             - Put all extra handwritten notes into 'deskripsiPekerjaan'.
             
             KUALITAS DETEKSI:

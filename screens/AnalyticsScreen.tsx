@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { OrderItem, PRICE_LIST, JobStatus } from '../types';
+import { OrderItem, PRICE_LIST, JobStatus, PaymentStatus } from '../types';
 import { format, isSameDay, isSameMonth, addDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { Wallet, TrendingUp, Package } from 'lucide-react';
@@ -19,14 +19,14 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
   const [timeframe, setTimeframe] = useState<'WEEK' | 'MONTH' | 'YEAR'>('WEEK');
 
   const statsSummary = useMemo(() => {
-    const completedOrders = orders.filter(o => o.status === JobStatus.BERES);
-    const totalEarnings = completedOrders.reduce((sum, o) => {
+    const paidOrders = orders.filter(o => o.paymentStatus === PaymentStatus.BAYAR);
+    const totalEarnings = paidOrders.reduce((sum, o) => {
       const price = PRICE_LIST[o.model.toUpperCase()] || PRICE_LIST['DEFAULT'];
-      return sum + (price * o.jumlahPesanan);
+      return sum + (price * (o.jumlahPesanan || 0));
     }, 0);
 
-    const totalPcs = orders.reduce((sum, o) => sum + o.jumlahPesanan, 0);
-    return { totalEarnings, totalPcs, completedCount: completedOrders.length };
+    const totalPcs = orders.reduce((sum, o) => sum + (o.jumlahPesanan || 0), 0);
+    return { totalEarnings, totalPcs, paidCount: paidOrders.length };
   }, [orders]);
 
   const chartData = useMemo(() => {
@@ -37,9 +37,9 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
       const diff = monday.getDate() - (day === 0 ? 6 : day - 1);
       monday.setDate(diff);
       monday.setHours(0, 0, 0, 0);
-      
+
       const dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-      
+
       return [0, 1, 2, 3, 4, 5].map(offset => {
         const date = addDays(monday, offset);
         return {
@@ -70,30 +70,30 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
       <h2 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Performance Stats</h2>
 
       <div className="flex gap-2">
-        <button 
-          onClick={() => setTimeframe('WEEK')} 
+        <button
+          onClick={() => setTimeframe('WEEK')}
           className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${timeframe === 'WEEK' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-white border-slate-100 text-slate-400'}`}
         >
           Pekan Ini
         </button>
-        <button 
-          onClick={() => setTimeframe('MONTH')} 
+        <button
+          onClick={() => setTimeframe('MONTH')}
           className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${timeframe === 'MONTH' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-white border-slate-100 text-slate-400'}`}
         >
           6 Bulan
         </button>
       </div>
 
-      <div className={`p-8 rounded-[2.5rem] bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-2xl relative overflow-hidden`}>
-         <div className="relative z-10 flex flex-col gap-1">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Total Earnings (Beres)</span>
-            <div className="flex items-center gap-3">
-               <Wallet className="opacity-60" size={24} />
-               <h3 className="text-3xl font-black">Rp {statsSummary.totalEarnings.toLocaleString()}</h3>
-            </div>
-            <p className="text-[10px] mt-4 opacity-70 font-medium">Berdasarkan {statsSummary.completedCount} pesanan selesai.</p>
-         </div>
-         <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+      <div className={`p-8 rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 text-white shadow-2xl relative overflow-hidden`}>
+        <div className="relative z-10 flex flex-col gap-1">
+          <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Total Gaji (Terbayar)</span>
+          <div className="flex items-center gap-3">
+            <Wallet className="opacity-60" size={24} />
+            <h3 className="text-3xl font-black">Rp {statsSummary.totalEarnings.toLocaleString()}</h3>
+          </div>
+          <p className="text-[10px] mt-4 opacity-70 font-medium">Berdasarkan {statsSummary.paidCount} item yang sudah dibayar.</p>
+        </div>
+        <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -111,14 +111,14 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
 
       <div className={`${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'} p-6 rounded-[2.5rem] shadow-xl border h-80`}>
         <div className="flex justify-between items-center mb-4 px-2">
-           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{timeframe === 'WEEK' ? 'Produksi Senin - Sabtu' : 'Grafik 6 Bulan Terakhir'}</h4>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{timeframe === 'WEEK' ? 'Produksi Senin - Sabtu' : 'Grafik 6 Bulan Terakhir'}</h4>
         </div>
         <ResponsiveContainer width="100%" height="90%">
           <AreaChart data={chartData}>
-            <defs><linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
+            <defs><linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
-            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 10}} />
-            <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : '#ffffff'}} />
+            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 10 }} />
+            <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : '#ffffff' }} />
             <Area type="monotone" dataKey="count" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCount)" />
           </AreaChart>
         </ResponsiveContainer>
@@ -128,8 +128,8 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode })
         <h4 className="font-black text-sm mb-2">Google Cloud Sync</h4>
         <p className="text-[10px] text-slate-400 leading-relaxed mb-4">Laporan bulanan PDF otomatis diunggah ke Google Docs setiap akhir bulan.</p>
         <div className="flex items-center gap-3">
-           <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-emerald-500 animate-pulse" /></div>
-           <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Active Sync On</span>
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-emerald-500 animate-pulse" /></div>
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Active Sync On</span>
         </div>
       </div>
     </div>

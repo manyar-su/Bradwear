@@ -1,9 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter, CloudUpload, Globe, Edit3 } from 'lucide-react';
-import { OrderItem, JobStatus, Priority } from '../types';
+import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, CalendarRange, ArrowUpDown, ListFilter, CloudUpload, Globe, Edit3, CreditCard, Wallet, AlertCircle } from 'lucide-react';
+import { OrderItem, JobStatus, Priority, PaymentStatus } from '../types';
 import { syncService } from '../services/syncService';
-// Fixed: Removed parseISO from date-fns imports as it's not exported or redundant for ISO strings
 import { differenceInDays, format, isSameWeek, isSameMonth, isSameYear } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 
@@ -11,19 +10,20 @@ interface HistoryScreenProps {
   orders: OrderItem[];
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: JobStatus) => void;
+  onUpdatePayment?: (id: string, status: PaymentStatus) => void;
   onEdit: (order: OrderItem) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   isDarkMode: boolean;
 }
 
-type FilterMode = 'SEMUA' | 'MINGGUAN' | 'BULANAN' | 'TAHUNAN';
+type FilterMode = 'TERDEKAT' | 'SUDAH DIBAYAR' | 'BELUM DIBAYAR' | 'SEMUA';
 
 const isValidDate = (date: any): date is Date => {
   return date instanceof Date && !isNaN(date.getTime());
 };
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdateStatus, onEdit, searchQuery, setSearchQuery, isDarkMode }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdateStatus, onUpdatePayment, onEdit, searchQuery, setSearchQuery, isDarkMode }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterMode, setFilterMode] = useState<FilterMode>('SEMUA');
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderItem | null>(null);
@@ -40,24 +40,43 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
 
       if (!matchSearch) return false;
 
-      // Fixed: Using new Date() instead of parseISO which was causing a compilation error
       const orderDate = new Date(o.createdAt);
       if (!isValidDate(orderDate)) return true;
 
+      const targetDateStr = o.tanggalTargetSelesai;
+      let daysLeft = 999;
+      try {
+        if (targetDateStr) {
+          const targetDate = targetDateStr.includes('-')
+            ? new Date(targetDateStr.split('-').reverse().join('-'))
+            : new Date(targetDateStr);
+          if (isValidDate(targetDate)) {
+            daysLeft = differenceInDays(targetDate, now);
+          }
+        }
+      } catch (e) { }
+
       switch (filterMode) {
-        case 'MINGGUAN':
-          return isSameWeek(orderDate, now, { weekStartsOn: 1 });
-        case 'BULANAN':
-          return isSameMonth(orderDate, now);
-        case 'TAHUNAN':
-          return isSameYear(orderDate, now);
+        case 'TERDEKAT':
+          return daysLeft >= 0 && daysLeft <= 7;
+        case 'SUDAH DIBAYAR':
+          return o.paymentStatus === PaymentStatus.BAYAR;
+        case 'BELUM DIBAYAR':
+          return o.paymentStatus === PaymentStatus.BELUM || !o.paymentStatus;
         case 'SEMUA':
         default:
           return true;
       }
     });
 
-    // Default sorting by newest
+    if (filterMode === 'TERDEKAT') {
+      return filtered.sort((a, b) => {
+        const da = differenceInDays(new Date(a.tanggalTargetSelesai), now);
+        const db = differenceInDays(new Date(b.tanggalTargetSelesai), now);
+        return da - db;
+      });
+    }
+
     return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders, searchQuery, filterMode]);
 
@@ -95,7 +114,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
       o.sizeDetails.forEach(sd => {
         const type = sd.tangan === 'Panjang' ? 'Lengan Panjang' : 'Lengan Pendek';
         const icon = sd.tangan === 'Panjang' ? '🌀' : '💠';
-        // Padding for a more table-like feel
         text += `${icon} *${sd.size}* | ${type} | *${sd.jumlah} PCS*\n`;
       });
       text += `────────────────────\n`;
@@ -114,41 +132,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
 
     const phoneNumber = "6283194190156";
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  const handleShareToPublic = async () => {
-    const selected = orders.filter(o => selectedIds.has(o.id));
-    if (selected.length === 0) {
-      alert("Pilih minimal 1 order untuk dibagikan ke publik.");
-      return;
-    }
-
-    const confirmShare = window.confirm(
-      `Anda akan membagikan ${selected.length} kode barang ke publik.\n\nSetelah dibagikan, semua pengguna aplikasi dapat mencari dan melihat rincian order ini.\n\nLanjutkan?`
-    );
-
-    if (!confirmShare) return;
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const order of selected) {
-      try {
-        await syncService.pushOrderToCloud(order);
-        successCount++;
-      } catch (e) {
-        console.error(`Failed to share order ${order.kodeBarang}:`, e);
-        failCount++;
-      }
-    }
-
-    if (failCount === 0) {
-      alert(`✅ Berhasil membagikan ${successCount} kode barang ke publik!\n\nSekarang semua pengguna dapat mencari kode ini di search box.`);
-    } else {
-      alert(`⚠️ ${successCount} berhasil, ${failCount} gagal dibagikan.\n\nCoba lagi untuk yang gagal.`);
-    }
-
-    setSelectedIds(new Set());
   };
 
   const getUrgencyStyles = (days: number) => {
@@ -173,16 +156,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
   };
 
   const cycleFilter = () => {
-    const modes: FilterMode[] = ['SEMUA', 'MINGGUAN', 'BULANAN', 'TAHUNAN'];
+    const modes: FilterMode[] = ['SEMUA', 'TERDEKAT', 'SUDAH DIBAYAR', 'BELUM DIBAYAR'];
     const currentIdx = modes.indexOf(filterMode);
     setFilterMode(modes[(currentIdx + 1) % modes.length]);
   };
 
   const getFilterIcon = () => {
     switch (filterMode) {
-      case 'MINGGUAN': return <CalendarDays size={14} />;
-      case 'BULANAN': return <CalendarRange size={14} />;
-      case 'TAHUNAN': return <Calendar size={14} />;
+      case 'TERDEKAT': return <Clock size={14} />;
+      case 'SUDAH DIBAYAR': return <CheckCircle size={14} />;
+      case 'BELUM DIBAYAR': return <AlertCircle size={14} />;
       default: return <ArrowUpDown size={14} />;
     }
   };
@@ -191,19 +174,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
     <div className={`p-6 min-h-screen transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-[#f4f7f9]'}`}>
       <div className="flex justify-between items-center mb-6">
         <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>History Kerja</h2>
-        {selectedIds.size > 0 && (
-          <div className="flex gap-2 animate-in slide-in-from-right">
-            <button
-              onClick={handleShareToPublic}
-              className="p-3 bg-blue-500 text-white rounded-2xl shadow-xl shadow-blue-500/20 active:scale-90"
-              title="Bagikan ke Publik"
-            >
-              <Globe size={18} />
-            </button>
-            <button onClick={handleShareWhatsApp} className="p-3 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-500/20 active:scale-90"><Send size={18} /></button>
-            <button className="p-3 bg-slate-800 text-white rounded-2xl shadow-xl active:scale-90"><FileText size={18} /></button>
-          </div>
-        )}
       </div>
 
       {selectedOrderDetails && (
@@ -245,7 +215,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
         </div>
       )}
 
-      {/* SEARCH BOX & SORT/FILTER BUTTON SYNCED WITH DASHBOARD */}
       <div className="flex gap-2 mb-8 animate-in fade-in duration-500">
         <div className="flex-1 relative group">
           <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${searchQuery ? 'text-[#10b981]' : 'text-slate-400'}`} size={18} />
@@ -266,7 +235,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
           )}
         </div>
 
-        {/* Sort/Filter Button matching the screenshot style (pill shape) */}
         <button
           onClick={cycleFilter}
           className={`flex items-center gap-2 px-5 rounded-[1.5rem] shadow-sm border transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-[#e2e8f0] border-slate-200 text-slate-700'}`}
@@ -299,11 +267,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
 
           let daysLeft = 0;
           try {
-            const targetDate = order.tanggalTargetSelesai.includes('-')
-              ? new Date(order.tanggalTargetSelesai.split('-').reverse().join('-'))
-              : new Date(order.tanggalTargetSelesai);
-            if (isValidDate(targetDate)) {
-              daysLeft = differenceInDays(targetDate, new Date());
+            if (order.tanggalTargetSelesai) {
+              const targetDate = order.tanggalTargetSelesai.includes('-')
+                ? new Date(order.tanggalTargetSelesai.split('-').reverse().join('-'))
+                : new Date(order.tanggalTargetSelesai);
+              if (isValidDate(targetDate)) {
+                daysLeft = differenceInDays(targetDate, new Date());
+              }
+            } else {
+              daysLeft = 999;
             }
           } catch { daysLeft = 999; }
 
@@ -313,13 +285,22 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
               className={`relative p-6 rounded-[2.5rem] border transition-all ${isSelected ? 'border-emerald-500 ring-8 ring-emerald-500/5 shadow-2xl scale-[1.01]' : isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}
             >
               <button
-                onClick={() => toggleSelect(order.id)}
-                className={`absolute top-6 left-6 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all z-10 ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSelect(order.id);
+                }}
+                className={`absolute top-6 left-6 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all z-20 ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30' : isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
               >
-                {isSelected && <CheckCircle size={12} strokeWidth={4} />}
+                {isSelected && <CheckCircle size={16} strokeWidth={4} />}
               </button>
 
-              <div className="flex flex-col gap-5">
+              {isSelected && (
+                <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none opacity-5 animate-in zoom-in duration-500">
+                  <CheckCircle size={150} strokeWidth={1} className="text-emerald-500" />
+                </div>
+              )}
+
+              <div className="relative z-10 flex flex-col gap-5">
                 <div className="flex justify-between items-center pl-8">
                   <span className={`text-[10px] font-black px-4 py-1.5 rounded-full border shadow-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-emerald-400' : 'bg-[#e6f7ef] border-emerald-100 text-emerald-600'}`}>
                     {order.kodeBarang}
@@ -381,15 +362,25 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
                 </div>
 
                 <div className="flex justify-between items-center pl-4 pr-2">
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(order.id, order.status === JobStatus.BERES ? JobStatus.PROSES : JobStatus.BERES);
-                    }}
-                    className={`text-[9px] font-black px-5 py-2.5 rounded-2xl transition-all shadow-sm uppercase tracking-[0.15em] flex items-center gap-2 ${order.status === JobStatus.BERES ? 'bg-emerald-500 text-white' : isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-white text-slate-500 border border-slate-100'}`}
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full ${order.status === JobStatus.BERES ? 'bg-white animate-pulse' : 'bg-orange-400'}`} />
-                    {order.status}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        onUpdateStatus(order.id, order.status === JobStatus.BERES ? JobStatus.PROSES : JobStatus.BERES);
+                      }}
+                      className={`text-[9px] font-black px-4 py-2.5 rounded-2xl transition-all shadow-sm uppercase tracking-[0.1em] flex items-center gap-2 ${order.status === JobStatus.BERES ? 'bg-emerald-500 text-white' : isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-white text-slate-500 border border-slate-100'}`}
+                    >
+                      {order.status}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (onUpdatePayment) onUpdatePayment(order.id, order.paymentStatus === PaymentStatus.BAYAR ? PaymentStatus.BELUM : PaymentStatus.BAYAR);
+                      }}
+                      className={`text-[9px] font-black px-4 py-2.5 rounded-2xl transition-all shadow-sm uppercase tracking-[0.1em] flex items-center gap-2 ${order.paymentStatus === PaymentStatus.BAYAR ? 'bg-blue-500 text-white' : isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-white text-slate-400 border border-slate-100'}`}
+                    >
+                      {order.paymentStatus === PaymentStatus.BAYAR ? 'Terbayar' : 'Belum Bayar'}
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => onEdit(order)} className="p-2.5 text-slate-400 hover:text-emerald-500 transition-colors" title="Edit Data"><Edit3 size={18} /></button>
                     <button onClick={() => setSelectedOrderDetails(order)} className="p-2.5 text-slate-400 hover:text-blue-500 transition-colors"><Info size={18} /></button>
@@ -403,6 +394,24 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onUpdat
           );
         })}
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-24 right-6 z-[80] animate-in slide-in-from-bottom-10 duration-500">
+          <button
+            onClick={handleShareWhatsApp}
+            className="group relative flex items-center gap-3 bg-emerald-500 text-white p-4 rounded-[2rem] shadow-[0_20px_40px_rgba(16,185,129,0.3)] hover:scale-105 active:scale-95 transition-all"
+          >
+            <div className="bg-white/20 p-2 rounded-xl">
+              <Send size={20} />
+            </div>
+            <div className="flex flex-col items-start pr-4">
+              <span className="text-[10px] font-black uppercase tracking-widest">Kirim WhatsApp</span>
+              <span className="text-[8px] font-bold opacity-80">{selectedIds.size} Item Terpilih</span>
+            </div>
+            <div className="absolute inset-0 bg-white/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

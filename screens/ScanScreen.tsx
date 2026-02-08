@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Loader2, Save, Plus, Trash2, ChevronLeft, AlertTriangle, Upload, FileText, Package, Scissors, RotateCcw } from 'lucide-react';
-import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS } from '../types';
+import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS, PaymentStatus } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 
@@ -40,6 +40,7 @@ const INITIAL_FORM_STATE: Partial<OrderItem> = {
   sakuType: SakuType.POLOS,
   sakuColor: SakuColor.ABU,
   status: JobStatus.PROSES,
+  paymentStatus: PaymentStatus.BELUM,
   priority: Priority.MEDIUM,
   embroideryStatus: 'Lengkap',
   embroideryNotes: '',
@@ -107,7 +108,10 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
         // Global check (async)
         const globalDup = await syncService.checkDuplicateCode(formData.kodeBarang);
 
-        if (localDup || globalDup) {
+        const isDifferentOwner = (globalDup && globalDup.namaPenjahit !== formData.namaPenjahit) ||
+          (localDup && localDup.namaPenjahit !== formData.namaPenjahit);
+
+        if (isDifferentOwner) {
           setShowDuplicateWarning(true);
           setDuplicateOwner((globalDup?.namaPenjahit || localDup?.namaPenjahit || null));
         } else {
@@ -210,12 +214,17 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     if (showDuplicateWarning) {
       setShowConfirmPopup(true);
     } else {
-      onSave(formData as OrderItem);
+      const orderToSave = formData as OrderItem;
+      onSave(orderToSave);
+      // Auto push to cloud handled by parent usually, but ensuring it here if needed
+      syncService.pushOrderToCloud(orderToSave);
     }
   };
 
   const handleConfirmDuplicate = () => {
-    onSave(formData as OrderItem);
+    const orderToSave = formData as OrderItem;
+    onSave(orderToSave);
+    syncService.pushOrderToCloud(orderToSave);
     setShowConfirmPopup(false);
   };
 
@@ -255,11 +264,12 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
               <AlertTriangle size={32} />
             </div>
             <div className="space-y-2">
-              <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Kode Barang Sudah Ada</h4>
+              <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Peringatan Kode Barang</h4>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                Kode <span className="text-red-500 font-black">{formData.kodeBarang}</span> sudah terdaftar {duplicateOwner ? `atas nama ` : ''}
-                {duplicateOwner && <span className="text-emerald-500 font-black">{duplicateOwner}</span>}.
-                Anda ingin tetap masuk?
+                Kode ini sudah di simpan oleh <span className="text-emerald-500 font-black">{duplicateOwner || 'user pertama'}</span>.
+                <br /><br />
+                Apakah kamu mengerjakan kode barang yang sama?
+                {isDarkMode ? <br /> : ' '}Jika iya maka kode barang bisa di simpan.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -267,7 +277,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                 onClick={handleConfirmDuplicate}
                 className="py-4 bg-red-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-red-500/20 active:scale-95 transition-all"
               >
-                Iya, Gandakan
+                Iya, Simpan
               </button>
               <button
                 onClick={() => setShowConfirmPopup(false)}

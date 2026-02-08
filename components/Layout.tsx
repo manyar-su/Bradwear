@@ -17,7 +17,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange, onS
     { view: 'HISTORY', label: 'History', icon: Clock },
     { view: 'SCAN', label: 'Scan', icon: Scan },
     { view: 'ANALYTICS', label: 'Stats', icon: BarChart3 },
-    { view: 'FORUM_CHAT', label: 'Forum', icon: MessageSquare },
+    { view: 'FORUM_CHAT', label: 'Team', icon: MessageSquare },
     { view: 'ACCOUNT', label: 'Account', icon: User },
   ];
 

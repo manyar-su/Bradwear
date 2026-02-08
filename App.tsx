@@ -7,7 +7,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import AnalyticsScreen from './screens/AnalyticsScreen';
 import AccountScreen from './screens/AccountScreen';
 import ChatScreen from './screens/ChatScreen';
-import { OrderItem, ViewState, JobStatus, Priority, SakuType, SakuColor } from './types';
+import { OrderItem, ViewState, JobStatus, Priority, SakuType, SakuColor, PaymentStatus } from './types';
 import { differenceInDays, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 import { extractOrderData } from './services/geminiService';
@@ -101,6 +101,22 @@ const App: React.FC = () => {
 
     // Initialize push notification service
     notificationService.init().catch(e => console.log('Notification init skipped:', e));
+
+    // AUTO-SYNC / MIGRATION ON MOUNT:
+    // This ensures that when the app is updated, local data is pushed to the cloud
+    const currentVersion = '2.2.0'; // INCREMENT VERSION TO TRIGGER RE-SYNC
+    const sessionSyncDone = sessionStorage.getItem('bradwear_startup_sync');
+    const lastSyncVersion = localStorage.getItem('bradwear_last_sync_version');
+
+    if (!sessionSyncDone || lastSyncVersion !== currentVersion) {
+      const ordersToSync = JSON.parse(localStorage.getItem('tailor_orders') || '[]');
+      if (ordersToSync.length > 0) {
+        syncService.syncAllLocalToCloud(ordersToSync).then(() => {
+          sessionStorage.setItem('bradwear_startup_sync', 'true');
+          localStorage.setItem('bradwear_last_sync_version', currentVersion);
+        });
+      }
+    }
 
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
@@ -333,7 +349,9 @@ const App: React.FC = () => {
   };
 
   const handleDeleteOrder = (id: string) => {
-    setOrders(orders.map(o => o.id === id ? { ...o, deletedAt: new Date().toISOString() } : o));
+    if (window.confirm("Apakah Anda yakin ingin menghapus Riwayat ini? Kerjaan akan dipindahkan ke Folder Sampah di menu Account.")) {
+      setOrders(orders.map(o => o.id === id ? { ...o, deletedAt: new Date().toISOString() } : o));
+    }
   };
 
   const handleRestoreOrder = (id: string) => {
@@ -347,14 +365,31 @@ const App: React.FC = () => {
   const handleUpdateStatus = (id: string, newStatus: JobStatus) => {
     setOrders(orders.map(o => {
       if (o.id === id) {
-        return {
+        const updated = {
           ...o,
           status: newStatus,
           completedAt: newStatus === JobStatus.BERES ? new Date().toISOString() : null
         };
+        // Sync update to cloud
+        syncService.pushOrderToCloud(updated).catch(e => console.error('Status Sync failed:', e));
+        return updated;
       }
       return o;
     }));
+  };
+
+  const handleUpdatePayment = (id: string, newStatus: PaymentStatus) => {
+    setOrders(orders.map(o => {
+      if (o.id === id) {
+        return { ...o, paymentStatus: newStatus };
+      }
+      return o;
+    }));
+    // Sync update to cloud
+    const order = orders.find(o => o.id === id);
+    if (order) {
+      syncService.pushOrderToCloud({ ...order, paymentStatus: newStatus }).catch(e => console.error('Payment Sync failed:', e));
+    }
   };
 
   const handleUpdateOrder = (updatedOrder: OrderItem) => {
@@ -539,6 +574,7 @@ const App: React.FC = () => {
           orders={activeOrders}
           onDelete={handleDeleteOrder}
           onUpdateStatus={handleUpdateStatus}
+          onUpdatePayment={handleUpdatePayment}
           onEdit={handleEditFromHistory}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}

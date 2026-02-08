@@ -3,6 +3,7 @@ import { OrderItem, JobStatus } from '../types';
 import { differenceInDays, parse, isValid } from 'date-fns';
 
 const NOTIFICATION_CHANNEL_ID = 'bradflow_deadline';
+const CHAT_CHANNEL_ID = 'bradflow_chat';
 
 // Parse Indonesian date format "d MMMM yyyy" or ISO string
 const parseDeadline = (dateStr: string): Date | null => {
@@ -39,12 +40,23 @@ export const notificationService = {
             const permResult = await LocalNotifications.requestPermissions();
             console.log('Notification permission:', permResult);
 
-            // Create notification channel for Android
+            // Create notification channel for Android (Deadline)
             await LocalNotifications.createChannel({
                 id: NOTIFICATION_CHANNEL_ID,
                 name: 'Deadline Reminder',
                 description: 'Notifikasi pengingat deadline order',
-                importance: 5, // Max importance
+                importance: 5,
+                visibility: 1,
+                vibration: true,
+                sound: 'default'
+            });
+
+            // Create notification channel for Android (Chat)
+            await LocalNotifications.createChannel({
+                id: CHAT_CHANNEL_ID,
+                name: 'Chat Messages',
+                description: 'Notifikasi pesan baru di Team Chat',
+                importance: 5,
                 visibility: 1,
                 vibration: true,
                 sound: 'default'
@@ -53,6 +65,25 @@ export const notificationService = {
             console.log('Notification service initialized');
         } catch (e) {
             console.error('Failed to init notifications:', e);
+        }
+    },
+
+    // Show a chat notification
+    async showChatNotification(sender: string, text: string): Promise<void> {
+        try {
+            await LocalNotifications.schedule({
+                notifications: [{
+                    id: 2000 + Math.floor(Math.random() * 1000),
+                    title: `💬 Pesan Baru: ${sender}`,
+                    body: text.length > 100 ? text.substring(0, 97) + '...' : text,
+                    channelId: CHAT_CHANNEL_ID,
+                    schedule: { at: new Date(Date.now() + 100) },
+                    sound: 'default',
+                    smallIcon: 'ic_launcher'
+                }]
+            });
+        } catch (e) {
+            console.error('Failed to show chat notification:', e);
         }
     },
 

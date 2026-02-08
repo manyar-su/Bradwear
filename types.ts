@@ -17,6 +17,11 @@ export enum JobStatus {
   PROSES = 'Proses'
 }
 
+export enum PaymentStatus {
+  BAYAR = 'Sudah Bayar',
+  BELUM = 'Belum Bayar'
+}
+
 export enum Priority {
   HIGH = 'High',
   MEDIUM = 'Medium',
@@ -57,13 +62,18 @@ export interface OrderItem {
   isManual?: boolean;
   createCalendarReminder?: boolean;
   modelDetail?: string;
+  paymentStatus?: PaymentStatus;
+  cloudId?: string;
 }
 
-export const BRAD_MODELS = ['Brad V1', 'Brad V2', 'PDH', 'Ventura', 'Rompi', 'Celana', 'Custom'];
+export const BRAD_MODELS = ['Brad V1', 'Brad V2', 'Brad V3', 'Yoroi', 'PDH', 'PDH Baru', 'Ventura', 'Rompi', 'Celana', 'Custom'];
 
 export const PRICE_LIST: Record<string, number> = {
   'PDH': 39000,
+  'PDH BARU': 39000,
   'BRAD V2': 39000,
+  'BRAD V3': 39000,
+  'YOROI': 42000,
   'BRAD V1': 34000,
   'VENTURA': 41000,
   'ROMPI': 45000,

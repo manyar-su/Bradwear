@@ -8,36 +8,53 @@ const CLOUD_CHAT_KEY = 'bradwear_global_chat';
 const GLOBAL_NOTIF_KEY = 'bradwear_global_notif';
 
 // Convert local OrderItem to Supabase format
-const toOrderDB = (order: OrderItem): Omit<OrderDB, 'id' | 'created_at' | 'updated_at'> => ({
+const toOrderDB = (order: OrderItem): Omit<OrderDB, 'id' | 'created_at' | 'updated_at'> & { id?: string } => ({
+    id: order.cloudId,
     kode_barang: order.kodeBarang,
     nama_penjahit: order.namaPenjahit,
     model: order.model,
     model_detail: order.modelDetail || null,
-    jumlah_pesanan: order.jumlahPesanan,
+    jumlah_pesanan: order.jumlahPesanan || 0,
     status: order.status,
     size_details: order.sizeDetails,
+    cs: order.cs || null,
+    konsumen: order.konsumen || null,
+    warna: order.warna || null,
+    tanggal_order: order.tanggalOrder || null,
+    tanggal_target_selesai: order.tanggalTargetSelesai || null,
+    saku_type: order.sakuType || null,
+    saku_color: order.sakuColor || null,
+    payment_status: order.paymentStatus || null,
+    priority: order.priority || null,
+    deskripsi_pekerjaan: order.deskripsiPekerjaan || null,
+    embroidery_status: order.embroideryStatus || null,
+    embroidery_notes: order.embroideryNotes || null,
     deleted_at: order.deletedAt || null
 });
 
 // Convert Supabase OrderDB to local format
 const toOrderItem = (db: OrderDB): OrderItem => ({
     id: db.id || '',
+    cloudId: db.id,
     kodeBarang: db.kode_barang,
     namaPenjahit: db.nama_penjahit,
-    konsumen: '',
-    tanggalOrder: db.created_at || new Date().toISOString(),
-    tanggalTargetSelesai: '',
-    cs: '',
+    konsumen: db.konsumen || '',
+    tanggalOrder: db.tanggal_order || db.created_at || new Date().toISOString(),
+    tanggalTargetSelesai: db.tanggal_target_selesai || '',
+    cs: db.cs || '',
     model: db.model,
     modelDetail: db.model_detail || undefined,
-    warna: '',
-    sakuType: 'Polos' as any,
-    sakuColor: 'Hitam' as any,
+    warna: db.warna || '',
+    sakuType: (db.saku_type as any) || 'Polos',
+    sakuColor: (db.saku_color as any) || 'Hitam',
     jumlahPesanan: db.jumlah_pesanan,
     status: db.status as any,
-    priority: 'Medium' as any,
-    deskripsiPekerjaan: '',
+    paymentStatus: db.payment_status as any || 'Belum Bayar',
+    priority: (db.priority as any) || 'Medium',
+    deskripsiPekerjaan: db.deskripsi_pekerjaan || '',
     sizeDetails: db.size_details || [],
+    embroideryStatus: (db.embroidery_status as any) || 'Lengkap',
+    embroideryNotes: db.embroidery_notes || '',
     createdAt: db.created_at || new Date().toISOString(),
     deletedAt: db.deleted_at || undefined
 });
@@ -100,6 +117,21 @@ export const syncService = {
             console.error("Search error:", e);
             return [];
         }
+    },
+
+    // Migrates/Syncs all local orders to cloud (useful after updates)
+    syncAllLocalToCloud: async (orders: OrderItem[]): Promise<void> => {
+        console.log(`Starting background sync for ${orders.length} orders...`);
+        // We do this in small batches or sequentially to avoid hitting rate limits
+        for (const order of orders) {
+            try {
+                // Only sync if not deleted permanently or as a safety measure
+                await syncService.pushOrderToCloud(order);
+            } catch (err) {
+                console.error(`Sync failed for order ${order.kodeBarang}:`, err);
+            }
+        }
+        console.log("Background sync completed.");
     },
 
     // Get all global orders from Supabase

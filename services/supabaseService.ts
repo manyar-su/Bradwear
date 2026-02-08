@@ -29,6 +29,18 @@ export interface OrderDB {
     jumlah_pesanan: number;
     status: string;
     size_details: any;
+    cs?: string;
+    konsumen?: string;
+    warna?: string;
+    tanggal_order?: string;
+    tanggal_target_selesai?: string;
+    saku_type?: string;
+    saku_color?: string;
+    payment_status?: string;
+    priority?: string;
+    deskripsi_pekerjaan?: string;
+    embroidery_status?: string;
+    embroidery_notes?: string;
     created_at?: string;
     updated_at?: string;
     deleted_at?: string;
@@ -68,13 +80,37 @@ export const supabaseService = {
         return data;
     },
 
-    subscribeToChatMessages(callback: (message: ChatMessageDB) => void): RealtimeChannel {
+    async deleteMessage(id: string): Promise<boolean> {
+        const { error } = await supabase
+            .from('chat_messages')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting message:', error);
+            return false;
+        }
+        return true;
+    },
+
+    subscribeToChatMessages(
+        onInsert: (message: ChatMessageDB) => void,
+        onDelete?: (id: string) => void
+    ): RealtimeChannel {
         return supabase
             .channel('chat_messages_channel')
             .on('postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'chat_messages' },
                 (payload) => {
-                    callback(payload.new as ChatMessageDB);
+                    onInsert(payload.new as ChatMessageDB);
+                }
+            )
+            .on('postgres_changes',
+                { event: 'DELETE', schema: 'public', table: 'chat_messages' },
+                (payload) => {
+                    if (onDelete && payload.old && payload.old.id) {
+                        onDelete(payload.old.id as string);
+                    }
                 }
             )
             .subscribe();
@@ -172,26 +208,43 @@ export const supabaseService = {
         return data || [];
     },
 
-    async upsertOrder(order: Omit<OrderDB, 'id' | 'created_at' | 'updated_at'>): Promise<OrderDB | null> {
+    async upsertOrder(order: Omit<OrderDB, 'id' | 'created_at' | 'updated_at'> & { id?: string }): Promise<OrderDB | null> {
         try {
-            // First check if order exists with this kode_barang
-            const { data: existing } = await supabase
-                .from('orders')
-                .select('nama_penjahit')
-                .eq('kode_barang', order.kode_barang)
-                .is('deleted_at', null)
-                .maybeSingle();
+            let targetId = order.id;
 
-            if (existing && existing.nama_penjahit !== order.nama_penjahit) {
-                console.warn(`Unauthorized update attempt for ${order.kode_barang} by ${order.nama_penjahit}. Owner is ${existing.nama_penjahit}`);
-                alert(`Gagal Update: Kode barang ${order.kode_barang} sudah terdaftar atas nama ${existing.nama_penjahit}. Hanya dia yang bisa merubah keterangan.`);
-                return null;
+            // Jika tidak ada ID, coba cari apakah sudah ada kode_barang + penjahit yang sama
+            if (!targetId) {
+                const { data: existing } = await supabase
+                    .from('orders')
+                    .select('id')
+                    .eq('kode_barang', order.kode_barang)
+                    .eq('nama_penjahit', order.nama_penjahit)
+                    .maybeSingle();
+
+                if (existing) {
+                    targetId = existing.id;
+                }
+            } else {
+                // Verifikasi kepemilikan jika ID disediakan
+                const { data: existing } = await supabase
+                    .from('orders')
+                    .select('nama_penjahit')
+                    .eq('id', targetId)
+                    .maybeSingle();
+
+                if (existing && existing.nama_penjahit !== order.nama_penjahit) {
+                    console.warn(`Unauthorized update attempt for record ${targetId} by ${order.nama_penjahit}. Owner is ${existing.nama_penjahit}`);
+                    return null;
+                }
             }
 
             const { data, error } = await supabase
                 .from('orders')
-                .upsert([{ ...order, updated_at: new Date().toISOString() }],
-                    { onConflict: 'kode_barang' })
+                .upsert([{
+                    ...order,
+                    id: targetId,
+                    updated_at: new Date().toISOString()
+                }])
                 .select()
                 .single();
 

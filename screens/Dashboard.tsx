@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Lock, Shield, Flame, PlusCircle, Layers, DollarSign, History, BarChart2 } from 'lucide-react';
+import { Search, Package, Clock, Sun, Moon, BellRing, Target, ArrowUpRight, ChevronRight, AlertCircle, X, Info, User, Calendar, Scissors, ShieldCheck, Lock, Shield, Flame, PlusCircle, Layers, DollarSign, History, BarChart2, Send, UserCheck } from 'lucide-react';
 import { OrderItem, JobStatus, Priority } from '../types';
 import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, addDays, isBefore, startOfDay } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -232,6 +232,9 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [globalResults, setGlobalResults] = useState<OrderItem[]>([]);
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
+  const [showFullUserResults, setShowFullUserResults] = useState(false);
+  const [fullUserResults, setFullUserResults] = useState<OrderItem[]>([]);
+  const [searchedUserName, setSearchedUserName] = useState('');
 
   const activeOnly = useMemo(() => orders.filter(o => !o.deletedAt), [orders]);
 
@@ -376,6 +379,18 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                   isDarkMode={isDarkMode}
                 />
                 <DetailRow
+                  icon={<ShieldCheck size={20} className="text-[#10b981]" />}
+                  label="Nama CS (Admin)"
+                  value={selectedOrder.cs || '-'}
+                  isDarkMode={isDarkMode}
+                />
+                <DetailRow
+                  icon={<UserCheck size={20} className="text-pink-500" />}
+                  label="Nama Konsumen"
+                  value={selectedOrder.konsumen || '-'}
+                  isDarkMode={isDarkMode}
+                />
+                <DetailRow
                   icon={<Calendar size={20} className="text-[#f59e0b]" />}
                   label="Target Selesai"
                   value={selectedOrder.tanggalTargetSelesai}
@@ -399,14 +414,120 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                   isDarkMode={isDarkMode}
                   isLongText
                 />
+
+                <div className={`mt-4 rounded-3xl p-5 border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#f8fafc] border-slate-100'}`}>
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Rincian Size & Jumlah</h5>
+                  <table className="w-full text-[10px]">
+                    <thead>
+                      <tr className="text-slate-400 opacity-60">
+                        <th className="text-left pb-3 font-black uppercase tracking-wider w-1/4">Size</th>
+                        <th className="text-center pb-3 font-black uppercase tracking-wider w-1/4">Qty</th>
+                        <th className="text-center pb-3 font-black uppercase tracking-wider w-1/4">Gender</th>
+                        <th className="text-right pb-3 font-black uppercase tracking-wider w-1/4">Lengan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100/10">
+                      {selectedOrder.sizeDetails.map((sd, i) => (
+                        <tr key={i} className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>
+                          <td className="py-3 font-black uppercase">{sd.size}</td>
+                          <td className="py-3 text-center font-black text-[#10b981] text-[11px]">{sd.jumlah}</td>
+                          <td className="py-3 text-center font-bold px-1">{sd.gender}</td>
+                          <td className="py-3 text-right font-medium opacity-80">{sd.tangan}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="mt-4 pt-4 border-t border-slate-200/10 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Pesanan</span>
+                    <span className="text-sm font-black text-[#10b981]">{selectedOrder.jumlahPesanan} PCS</span>
+                  </div>
+                </div>
               </div>
 
-              <button
-                onClick={() => { setSelectedOrderId(null); onViewHistory(); }}
-                className="w-full py-5 bg-[#10b981] text-white rounded-3xl font-black uppercase tracking-widest text-xs shadow-xl shadow-[#10b981]/20 active:scale-95 transition-all mt-4"
-              >
-                Lihat di History
-              </button>
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <button
+                  onClick={() => {
+                    const text = `✨ *Rincian Kerja: ${selectedOrder.kodeBarang}* ✨\n` +
+                      `Model: ${selectedOrder.model}\n` +
+                      `Penjahit: ${selectedOrder.namaPenjahit}\n` +
+                      `Total: ${selectedOrder.jumlahPesanan} PCS`;
+                    const phoneNumber = "6283194190156";
+                    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                  className="py-4 bg-emerald-500 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Send size={16} /> WhatsApp
+                </button>
+                <button
+                  onClick={() => { setSelectedOrderId(null); onViewHistory(); }}
+                  className={`py-4 rounded-[2rem] font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                >
+                  Riwayat
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFullUserResults && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+          <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col max-h-[85vh] ${isDarkMode ? 'bg-slate-900 text-white border border-slate-800' : 'bg-white text-slate-800'}`}>
+            <button
+              onClick={() => setShowFullUserResults(false)}
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-red-500"
+            >
+              <X size={24} />
+            </button>
+
+            <div className="mb-6 pr-8">
+              <h3 className="text-xl font-black uppercase tracking-tight">Rincian Kerja</h3>
+              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">
+                {searchedUserName} <span className="text-slate-400 opacity-50">•</span> {fullUserResults.length} Item
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 overflow-y-auto pr-2 no-scrollbar">
+              {fullUserResults.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tidak ada data</p>
+                </div>
+              ) : fullUserResults.map((order, idx) => (
+                <button
+                  key={order.id}
+                  onClick={() => {
+                    setSelectedOrderId(order.id);
+                    setShowFullUserResults(false);
+                  }}
+                  className={`flex flex-col gap-2 p-5 rounded-[2.5rem] border shadow-sm transition-all active:scale-[0.98] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}
+                  style={{ animationDelay: `${idx * 50}ms` }}
+                >
+                  <div className="flex justify-between items-center w-full">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-black px-4 py-1.5 rounded-full border shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-emerald-100 text-emerald-600'}`}>
+                        {order.kodeBarang}
+                      </span>
+                      <span className={`text-[7px] font-black px-2 py-0.5 rounded-md uppercase tracking-tighter ${order.status === JobStatus.BERES ? 'bg-emerald-500/10 text-emerald-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-300" />
+                  </div>
+                  <div className="flex flex-col items-start gap-0.5">
+                    <p className={`text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{order.model} • {order.warna}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={10} className="text-slate-400" />
+                        <span className="text-[8px] font-bold text-slate-400 uppercase">{order.tanggalTargetSelesai || '-'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Package size={10} className="text-slate-400" />
+                        <span className="text-[8px] font-bold text-slate-400 uppercase">{order.jumlahPesanan} PCS</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -526,7 +647,12 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-black uppercase truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{order.kodeBarang}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase truncate">PJ: {order.namaPenjahit}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase truncate">PJ: {order.namaPenjahit}</p>
+                          <span className={`text-white text-[6px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter ${order.status === JobStatus.BERES ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}>
+                            {order.status}
+                          </span>
+                        </div>
                       </div>
                       <ChevronRight size={14} className="text-slate-300" />
                     </button>
@@ -553,6 +679,9 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                         <p className={`text-xs font-black uppercase truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{order.kodeBarang}</p>
                         <div className="flex items-center gap-2">
                           <p className="text-[9px] font-bold text-slate-400 uppercase truncate">PJ: {order.namaPenjahit}</p>
+                          <span className={`text-white text-[6px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter ${order.status === JobStatus.BERES ? 'bg-emerald-500' : 'bg-orange-500'}`}>
+                            {order.status}
+                          </span>
                           <span className={`text-white text-[6px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter ${order.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim() ? 'bg-emerald-500' : 'bg-amber-500'}`}>
                             {order.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim() ? 'Milik Anda' : 'Public'}
                           </span>
@@ -565,11 +694,28 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
                   <div className="h-[1px] bg-slate-100/10 mx-2 my-1" />
                   <button
                     onClick={() => {
-                      setSearchQuery(localSearch);
-                      onViewHistory();
+                      // Jika pencarian mengandung nama user, tampilkan popup rincian user
+                      const lowerSearch = localSearch.toLowerCase();
+                      const allRelated = [...orders, ...globalResults].filter(o =>
+                        o.namaPenjahit.toLowerCase().includes(lowerSearch) ||
+                        o.kodeBarang.toLowerCase().includes(lowerSearch)
+                      );
+
+                      // Cari nama user yang paling pas dari hasil
+                      const userMatch = allRelated.find(o => o.namaPenjahit.toLowerCase().includes(lowerSearch));
+
+                      if (userMatch) {
+                        setFullUserResults(allRelated);
+                        setSearchedUserName(userMatch.namaPenjahit);
+                        setShowFullUserResults(true);
+                      } else {
+                        // Fallback ke history jika tidak ada user match yang jelas
+                        setSearchQuery(localSearch);
+                        onViewHistory();
+                      }
                       setShowSearchResults(false);
                     }}
-                    className="w-full py-2.5 text-[9px] font-black text-emerald-500 uppercase tracking-widest text-center"
+                    className="w-full py-3 text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] text-center hover:bg-emerald-500/5 transition-colors"
                   >
                     Lihat Semua Hasil
                   </button>
