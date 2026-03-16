@@ -1,14 +1,15 @@
 {
   "name": "bradflow",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.7.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "verify": "tsx utils/sizeGrouping.verify.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
@@ -21,6 +22,7 @@
     "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.93.3",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.35.2",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -29,6 +31,8 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "tinyexec": "^1.0.3",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

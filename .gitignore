@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Android keystore (sensitive - never commit)
+*.jks
+*.keystore
+
+# Android build outputs
+android/apk/
+android/aab/
+android/app/build/
+android/build/
+android/.gradle/
+
+# Environment variables (sensitive)
+.env
+.env.local
+.env.*

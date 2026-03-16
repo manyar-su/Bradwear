@@ -1,6 +1,7 @@
-
 import { OrderItem, ChatMessage } from '../types';
 import { supabaseService, OrderDB } from './supabaseService';
+import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale/id';
 
 // Local storage keys for offline/fallback
 const LOCAL_ORDERS_KEY = 'tailor_orders';
@@ -29,17 +30,18 @@ const toOrderDB = (order: OrderItem): Omit<OrderDB, 'id' | 'created_at' | 'updat
     deskripsi_pekerjaan: order.deskripsiPekerjaan || null,
     embroidery_status: order.embroideryStatus || null,
     embroidery_notes: order.embroideryNotes || null,
+    completed_at: order.completedAt || null,
     deleted_at: order.deletedAt || null
 });
 
 // Convert Supabase OrderDB to local format
-const toOrderItem = (db: OrderDB): OrderItem => ({
+export const toOrderItem = (db: OrderDB): OrderItem => ({
     id: db.id || '',
     cloudId: db.id,
     kodeBarang: db.kode_barang,
     namaPenjahit: db.nama_penjahit,
     konsumen: db.konsumen || '',
-    tanggalOrder: db.tanggal_order || db.created_at || new Date().toISOString(),
+    tanggalOrder: db.tanggal_order || (db.created_at ? format(new Date(db.created_at), 'd MMMM yyyy', { locale: idLocale }) : ''),
     tanggalTargetSelesai: db.tanggal_target_selesai || '',
     cs: db.cs || '',
     model: db.model,
@@ -55,30 +57,38 @@ const toOrderItem = (db: OrderDB): OrderItem => ({
     sizeDetails: db.size_details || [],
     embroideryStatus: (db.embroidery_status as any) || 'Lengkap',
     embroideryNotes: db.embroidery_notes || '',
+    completedAt: db.completed_at || null,
     createdAt: db.created_at || new Date().toISOString(),
     deletedAt: db.deleted_at || undefined
 });
 
 export const syncService = {
     // Pushes a local order to Supabase (public cloud)
-    pushOrderToCloud: async (order: OrderItem): Promise<void> => {
+    pushOrderToCloud: async (order: OrderItem): Promise<OrderItem | null> => {
         try {
             console.log('Pushing order to Supabase:', order.kodeBarang);
             const result = await supabaseService.upsertOrder(toOrderDB(order));
             if (result) {
                 console.log('Order pushed successfully:', result);
+                const updatedItem = toOrderItem(result);
+
                 // Broadcast notification locally
                 const notif = {
                     id: Math.random().toString(36).substr(2, 9),
                     sender: order.namaPenjahit,
                     kode: order.kodeBarang,
+                    type: order.deletedAt ? 'DELETE' : 'UPDATE',
                     timestamp: new Date().toISOString()
                 };
                 localStorage.setItem(GLOBAL_NOTIF_KEY, JSON.stringify(notif));
                 window.dispatchEvent(new Event('storage'));
+
+                return updatedItem;
             }
+            return null;
         } catch (e) {
             console.error("Sync Error:", e);
+            return null;
         }
     },
 
@@ -145,6 +155,22 @@ export const syncService = {
         }
     },
 
+    // Get deleted orders for a specific tailor
+    getDeletedOrders: async (namaPenjahit: string): Promise<OrderItem[]> => {
+        try {
+            const orders = await supabaseService.getDeletedOrders(namaPenjahit);
+            return orders.map(toOrderItem);
+        } catch (e) {
+            console.error("Get deleted orders error:", e);
+            return [];
+        }
+    },
+
+    // Delete an order permanently from Supabase
+    deleteOrderPermanently: async (id: string): Promise<boolean> => {
+        return supabaseService.deleteOrderPermanently(id);
+    },
+
     // Sends a message to the forum (legacy - now uses supabaseService directly)
     sendMessage: (msg: ChatMessage) => {
         try {
@@ -164,5 +190,20 @@ export const syncService = {
         } catch (e) {
             return [];
         }
+    },
+
+    // Subscribes to global order changes
+    subscribeToGlobalOrders: (onChange: (order: OrderItem, event: 'INSERT' | 'UPDATE' | 'DELETE') => void) => {
+        return supabaseService.subscribeToOrders((payload) => {
+            if (payload.eventType === 'DELETE') {
+                onChange({ id: payload.old.id } as OrderItem, 'DELETE');
+            } else {
+                onChange(toOrderItem(payload.new), payload.eventType);
+            }
+        });
+    },
+
+    unsubscribe: (channel: any) => {
+        supabaseService.unsubscribe(channel);
     }
 };

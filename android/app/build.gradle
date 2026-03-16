@@ -1,14 +1,45 @@
 apply plugin: 'com.android.application'
 
+
+def getPackageVersion() {
+    def inputFile = new File(projectDir, "../../package.json")
+    def text = inputFile.text
+    def pattern = /"version":\s*"([^"]+)"/
+    def matcher = (text =~ pattern)
+    if (matcher.find()) {
+        return matcher.group(1)
+    }
+    return "1.0.0"
+}
+
+def getVersionCode() {
+    def version = getPackageVersion()
+    def parts = version.tokenize('.')
+    def major = parts.size() > 0 ? parts[0].toInteger() : 0
+    def minor = parts.size() > 1 ? parts[1].toInteger() : 0
+    def patch = parts.size() > 2 ? parts[2].toInteger() : 0
+    return (major * 10000) + (minor * 100) + patch
+}
+
 android {
     namespace = "com.bradwear.flow"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    signingConfigs {
+        release {
+            storeFile file("../bradflow-release.jks")
+            storePassword "bradflow2024"
+            keyAlias "bradflow"
+            keyPassword "bradflow2024"
+        }
+    }
+
     defaultConfig {
         applicationId "com.bradwear.flow"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 20702
+        versionName "2.7.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,6 +51,14 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def buildType = variant.buildType.name
+            outputFileName = "bradflow-v2.7.2-${buildType}.apk"
         }
     }
 }
@@ -43,6 +82,13 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

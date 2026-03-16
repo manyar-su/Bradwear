@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare, Key, CheckCircle2 } from 'lucide-react';
+import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare, Key, CheckCircle2, Ruler } from 'lucide-react';
 import { extractSplitData } from '../services/geminiService';
 import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus } from '../types';
 import { format } from 'date-fns';
@@ -9,6 +9,36 @@ import { id as idLocale } from 'date-fns/locale/id';
 const DEFAULT_TAILOR_NAMES = [
   "Maris", "Ferry", "Aan", "Farid", "Opik",
   "Fadil", "Asep", "Abdul", "Hadi", "Epul"
+];
+
+const DEFAULT_SIZE_CHART = [
+  {
+    id: 'default-kemeja',
+    name: 'KEMEJA BRADWEAR',
+    entries: [
+      { size: 'S', tinggi: 70, lebarDada: 50, lebarBahu: 42, lenganPanjang: 59, lenganPendek: 22, kerah: 44, manset: 24 },
+      { size: 'M', tinggi: 72, lebarDada: 52, lebarBahu: 44, lenganPanjang: 60, lenganPendek: 23, kerah: 45, manset: 25 },
+      { size: 'L', tinggi: 74, lebarDada: 54, lebarBahu: 46, lenganPanjang: 61, lenganPendek: 24, kerah: 46, manset: 26 },
+      { size: 'XL', tinggi: 76, lebarDada: 56, lebarBahu: 48, lenganPanjang: 62, lenganPendek: 25, kerah: 47, manset: 27 },
+      { size: 'XXL', tinggi: 78, lebarDada: 58, lebarBahu: 50, lenganPanjang: 63, lenganPendek: 26, kerah: 48, manset: 28 },
+      { size: 'XXXL', tinggi: 80, lebarDada: 60, lebarBahu: 52, lenganPanjang: 64, lenganPendek: 27, kerah: 49, manset: 29 },
+      { size: 'XXXXL', tinggi: 82, lebarDada: 62, lebarBahu: 54, lenganPanjang: 65, lenganPendek: 28, kerah: 50, manset: 30 },
+      { size: 'XXXXXL', tinggi: 84, lebarDada: 64, lebarBahu: 56, lenganPanjang: 66, lenganPendek: 29, kerah: 51, manset: 31 }
+    ]
+  },
+  {
+    id: 'default-celana',
+    name: 'CELANA BRADWEAR',
+    entries: [
+      { size: '28', tinggi: 102, lingkarPinggang: 82, lingkarPinggul: 92, lingkarPaha: 59, lingkarBawah: 36 },
+      { size: '30', tinggi: 102, lingkarPinggang: 86, lingkarPinggul: 96, lingkarPaha: 61, lingkarBawah: 38 },
+      { size: '32', tinggi: 104, lingkarPinggang: 90, lingkarPinggul: 100, lingkarPaha: 63, lingkarBawah: 40 },
+      { size: '34', tinggi: 104, lingkarPinggang: 94, lingkarPinggul: 104, lingkarPaha: 65, lingkarBawah: 42 },
+      { size: '36', tinggi: 106, lingkarPinggang: 98, lingkarPinggul: 108, lingkarPaha: 67, lingkarBawah: 44 },
+      { size: '38', tinggi: 106, lingkarPinggang: 102, lingkarPinggul: 112, lingkarPaha: 69, lingkarBawah: 46 },
+      { size: '40', tinggi: 108, lingkarPinggang: 106, lingkarPinggul: 116, lingkarPaha: 71, lingkarBawah: 48 }
+    ]
+  }
 ];
 
 const MenuItem = ({ icon, label, isDarkMode, onClick, badge }: any) => (
@@ -24,7 +54,7 @@ const MenuItem = ({ icon, label, isDarkMode, onClick, badge }: any) => (
   </button>
 );
 
-const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore, onPermanentDelete, onUpdateOrder }: { isDarkMode: boolean, orders?: OrderItem[], deletedOrders: OrderItem[], onRestore: (id: string) => void, onPermanentDelete: (id: string) => void, onUpdateOrder: (order: OrderItem) => void }) => {
+const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore, onPermanentDelete, onUpdateOrder, onViewChange, triggerConfirm }: { isDarkMode: boolean, orders?: OrderItem[], deletedOrders: OrderItem[], onRestore: (id: string) => void, onPermanentDelete: (id: string) => void, onUpdateOrder: (order: OrderItem) => void, onViewChange: (view: any) => void, triggerConfirm: (config: any) => void }) => {
   const [showSplitPopup, setShowSplitPopup] = useState(false);
   const [showPricePopup, setShowPricePopup] = useState(false);
   const [showReportPopup, setShowReportPopup] = useState(false);
@@ -32,8 +62,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const [showRecyclePopup, setShowRecyclePopup] = useState(false);
   const [showEmbroideryPopup, setShowEmbroideryPopup] = useState(false);
   const [showApiKeyPopup, setShowApiKeyPopup] = useState(false);
+  const [showSizeChartPopup, setShowSizeChartPopup] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -58,8 +88,28 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   // Embroidery Edit State
   const [editingEmbroideryOrder, setEditingEmbroideryOrder] = useState<OrderItem | null>(null);
 
-  const [splitResult, setSplitResult] = useState<{ orders: any[], totalPcs: number } | null>(null);
+  // Size Chart State
+  const [sizeCharts, setSizeCharts] = useState<any[]>(() => {
+    const saved = localStorage.getItem('bradwear_size_charts');
+    let current: any[] = [];
+    if (saved) {
+      current = JSON.parse(saved);
+    }
+    
+    // Ensure default charts are present
+    const final = [...current];
+    DEFAULT_SIZE_CHART.forEach(def => {
+      if (!final.some(c => c.id === def.id)) {
+        final.push(def);
+      }
+    });
+    return final;
+  });
+  const [editingChartId, setEditingChartId] = useState<string | null>(null);
+  const [newChartName, setNewChartName] = useState('');
   const [selectedIndicesForShare, setSelectedIndicesForShare] = useState<Set<number>>(new Set());
+  const [splitResult, setSplitResult] = useState<{ orders: any[], totalPcs: number } | null>(null);
+  const [viewingChartId, setViewingChartId] = useState<string | null>(null);
 
   const [customNames, setCustomNames] = useState<string[]>(() => {
     const saved = localStorage.getItem('pecah_rata_names');
@@ -77,7 +127,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     else localStorage.removeItem('profileImage');
     localStorage.setItem('pecah_rata_names', JSON.stringify(customNames));
     localStorage.setItem('bradwear_price_list', JSON.stringify(prices));
-  }, [profileName, isLoggedIn, profileImage, customNames, prices]);
+    localStorage.setItem('bradwear_size_charts', JSON.stringify(sizeCharts));
+  }, [profileName, isLoggedIn, profileImage, customNames, prices, sizeCharts]);
 
   const monthlyReports = useMemo(() => {
     const stats: Record<string, { totalOrders: number, totalPcs: number, totalEarnings: number, rawDate: Date, ordersList: OrderItem[] }> = {};
@@ -94,8 +145,20 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       stats[monthKey].totalPcs += o.jumlahPesanan;
       stats[monthKey].ordersList.push(o);
       if (o.status === JobStatus.BERES) {
-        const price = prices[o.model.toUpperCase()] || prices['DEFAULT'] || 0;
-        stats[monthKey].totalEarnings += (price * o.jumlahPesanan);
+        let orderEarnings = 0;
+        if (o.sizeDetails && o.sizeDetails.length > 0) {
+          o.sizeDetails.forEach(sd => {
+            const m = o.model.toUpperCase();
+            const category = sd.tangan === 'Panjang' ? 'KPLJ' : 'KLPD';
+            const priceKey = `${m}_${category}`;
+            const price = prices[priceKey] || prices[m] || prices['DEFAULT'] || 0;
+            orderEarnings += (price * sd.jumlah);
+          });
+        } else {
+          const price = prices[o.model.toUpperCase()] || prices['DEFAULT'] || 0;
+          orderEarnings = (price * o.jumlahPesanan);
+        }
+        stats[monthKey].totalEarnings += orderEarnings;
       }
     });
     return Object.entries(stats).sort((a, b) => b[1].rawDate.getTime() - a[1].rawDate.getTime());
@@ -140,9 +203,12 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   };
 
   const handleExitApp = () => {
-    if (confirm("Keluar dari akun Anda?")) {
-      setIsLoggedIn(false);
-    }
+    triggerConfirm({
+      title: 'Keluar Akun?',
+      message: 'Anda akan keluar dari sesi saat ini.',
+      type: 'warning',
+      onConfirm: () => setIsLoggedIn(false)
+    });
   };
 
   const handleProfileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,13 +234,41 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       );
       const result = await extractSplitData(base64Images);
 
-      const ordersData = (result.orders || []).map((order: any) => ({
+      const rawOrders = (result.orders || []).map((order: any) => ({
         ...order,
         sizeCounts: (order.sizeCounts || []).map((s: any) => ({
           size: s.size,
           jumlah: parseInt(s.jumlah) || 0
         }))
       }));
+
+      // MERGE DUPLICATES (Orders & Sizes)
+      const mergedOrders: any[] = [];
+      rawOrders.forEach((raw: any) => {
+        const existingOrder = mergedOrders.find(o => 
+          o.kodeBarang === raw.kodeBarang && 
+          (o.model || '').toLowerCase() === (raw.model || '').toLowerCase()
+        );
+
+        if (existingOrder) {
+          raw.sizeCounts.forEach((s: any) => {
+            const existingSize = existingOrder.sizeCounts.find((es: any) => es.size === s.size);
+            if (existingSize) {
+              existingSize.jumlah += s.jumlah;
+            } else {
+              existingOrder.sizeCounts.push({ ...s });
+            }
+          });
+        } else {
+          // Deep copy sizeCounts to avoid mutation issues
+          mergedOrders.push({
+            ...raw,
+            sizeCounts: raw.sizeCounts.map((s: any) => ({ ...s }))
+          });
+        }
+      });
+
+      const ordersData = mergedOrders;
 
       const totalPcs = ordersData.reduce((sum: number, order: any) =>
         sum + order.sizeCounts.reduce((sSum: number, s: any) => sSum + s.jumlah, 0), 0
@@ -327,13 +421,18 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   };
 
   const handleDeletePrice = (key: string) => {
-    if (confirm(`Hapus harga untuk model ${key}?`)) {
-      setPrices(prev => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-    }
+    triggerConfirm({
+      title: 'Hapus Harga?',
+      message: `Hapus harga untuk model ${key}?`,
+      type: 'danger',
+      onConfirm: () => {
+        setPrices(prev => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    });
   };
 
   const handleAddNewPrice = () => {
@@ -464,6 +563,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                 <div className="h-[1px] mx-4 bg-[#f8fafc]" />
                 <MenuItem icon={<DollarSign className="text-amber-500" />} label="Daftar Harga" isDarkMode={isDarkMode} onClick={() => setShowPricePopup(true)} />
                 <div className="h-[1px] mx-4 bg-[#f8fafc]" />
+                <MenuItem icon={<Ruler className="text-purple-500" />} label="Size Chart" isDarkMode={isDarkMode} onClick={() => setShowSizeChartPopup(true)} />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
                 <MenuItem icon={<Scissors className="text-blue-500" />} label="Manajemen Bordir" isDarkMode={isDarkMode} onClick={() => setShowEmbroideryPopup(true)} badge="Check" />
               </div>
             </div>
@@ -471,6 +572,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
             <div>
               <h5 className="text-[10px] font-black uppercase tracking-[0.2em] ml-4 mb-3 text-[#94a3b8]">Sistem</h5>
               <div className={`rounded-3xl overflow-hidden border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-[#f1f5f9] shadow-sm'}`}>
+                <MenuItem icon={<Users className="text-[#10b981]" />} label="Team Chatting" isDarkMode={isDarkMode} onClick={() => onViewChange('FORUM_CHAT')} badge="LIVE" />
+                <div className="h-[1px] mx-4 bg-[#f8fafc]" />
                 <MenuItem icon={<Key className="text-amber-600" />} label="API KEY Management" isDarkMode={isDarkMode} onClick={() => setShowApiKeyPopup(true)} badge="NEW" />
                 <div className="h-[1px] mx-4 bg-[#f8fafc]" />
                 <MenuItem icon={<Info className="text-blue-500" />} label="Laporan Bulanan" isDarkMode={isDarkMode} onClick={() => setShowReportPopup(true)} badge="AI" />
@@ -553,9 +656,12 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Daftar Penjahit</h5>
                     <button
                       onClick={() => {
-                        if (confirm("Kembalikan 10 nama penjahit asli?")) {
-                          setCustomNames(DEFAULT_TAILOR_NAMES);
-                        }
+                        triggerConfirm({
+                          title: 'Reset Nama?',
+                          message: 'Kembalikan ke 10 nama penjahit asli dari sistem?',
+                          type: 'warning',
+                          onConfirm: () => setCustomNames(DEFAULT_TAILOR_NAMES)
+                        });
                       }}
                       className="p-1.5 bg-amber-50 rounded-lg text-amber-600 active:scale-95 transition-all"
                       title="Kembalikan 10 Nama Asli"
@@ -746,7 +852,14 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                         <RotateCcw size={16} />
                       </button>
                       <button
-                        onClick={() => setDeleteConfirmId(o.id)}
+                        onClick={() => {
+                          triggerConfirm({
+                            title: 'HAPUS PERMANEN?',
+                            message: `Hapus data [${o.kodeBarang}] selamanya?`,
+                            type: 'danger',
+                            onConfirm: () => onPermanentDelete(o.id)
+                          });
+                        }}
                         className="p-2 bg-red-100 text-red-600 rounded-xl active:scale-90 shadow-sm"
                       >
                         <Trash2 size={16} />
@@ -756,43 +869,6 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                 </div>
               ))}
             </div>
-
-            {deleteConfirmId && (
-              <div className="absolute inset-0 z-[110] bg-black/60 backdrop-blur-md flex items-center justify-center p-6 rounded-[3rem] animate-in fade-in duration-300">
-                <div className={`w-full max-w-[280px] p-8 rounded-[2rem] shadow-2xl border text-center flex flex-col items-center animate-in zoom-in duration-300 ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-50'}`}>
-                  <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 border-4 border-red-50/50">
-                    <AlertTriangle size={36} strokeWidth={2.5} />
-                  </div>
-
-                  <div className="space-y-3 mb-8">
-                    <h4 className={`text-sm font-black uppercase tracking-tight leading-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                      SERIUS KAMU MAU HAPUS DATA?
-                    </h4>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed px-4">
-                      TINDAKAN INI PERMANEN DAN TIDAK BISA DIKEMBALIKAN.
-                    </p>
-                  </div>
-
-                  <div className="w-full flex flex-col gap-3">
-                    <button
-                      onClick={() => {
-                        onPermanentDelete(deleteConfirmId);
-                        setDeleteConfirmId(null);
-                      }}
-                      className="w-full py-4 bg-red-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-all"
-                    >
-                      IYA
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmId(null)}
-                      className={`w-full py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}
-                    >
-                      TIDAK
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -877,6 +953,200 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
         </div>
       )}
 
+      {/* Size Chart Popup */}
+      {showSizeChartPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col max-h-[90vh] ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black">Size Chart</h3>
+              <button onClick={() => { setShowSizeChartPopup(false); setEditingChartId(null); }} className="text-slate-400 hover:text-red-500"><X size={24} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar pr-1 pb-4 space-y-4">
+              {!editingChartId ? (
+                <>
+                  {sizeCharts.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center gap-4 opacity-30 text-center">
+                      <Ruler size={48} />
+                      <p className="text-[10px] font-black uppercase">Belum ada size chart</p>
+                    </div>
+                  ) : sizeCharts.map((chart) => (
+                    <div 
+                      key={chart.id} 
+                      onClick={() => setViewingChartId(viewingChartId === chart.id ? null : chart.id)}
+                      className={`group p-5 rounded-3xl border flex flex-col gap-3 transition-all cursor-pointer ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black uppercase tracking-widest text-[#10b981]">{chart.name}</span>
+                        <div className="flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setEditingChartId(chart.id); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl"><Edit2 size={14} /></button>
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            triggerConfirm({
+                              title: 'Hapus Chart?',
+                              message: `Hapus size chart ${chart.name}?`,
+                              type: 'danger',
+                              onConfirm: () => setSizeCharts(sizeCharts.filter(c => c.id !== chart.id))
+                            });
+                          }} className="p-2 text-red-500 hover:bg-red-50 rounded-xl"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 child:transition-all">
+                        {chart.entries.map((e: any, idx: number) => (
+                          <span key={idx} className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${isDarkMode ? 'bg-slate-950 text-emerald-400 border border-emerald-500/20' : 'bg-slate-50 text-slate-600 border border-slate-100 shadow-inner'}`}>
+                            {e.size}
+                          </span>
+                        ))}
+                      </div>
+
+                      {viewingChartId === chart.id && (
+                        <div className="mt-4 pt-4 border-t border-slate-500/10 space-y-3 animate-in fade-in slide-in-from-top-2">
+                          <div className="overflow-x-auto no-scrollbar">
+                            <table className="w-full text-[8px] font-black uppercase text-center border-separate border-spacing-1">
+                              <thead>
+                                <tr className="text-slate-400">
+                                  <th className="text-left w-6">Sz</th>
+                                  <th>T</th>
+                                  {chart.entries[0]?.lebarDada !== undefined && <th>LD</th>}
+                                  {chart.entries[0]?.lebarBahu !== undefined && <th>LB</th>}
+                                  {chart.entries[0]?.lenganPanjang !== undefined && <th>LPJ</th>}
+                                  {chart.entries[0]?.lenganPendek !== undefined && <th>LPD</th>}
+                                  {chart.entries[0]?.kerah !== undefined && <th>K</th>}
+                                  {chart.entries[0]?.manset !== undefined && <th>M</th>}
+                                  {chart.entries[0]?.lingkarPinggang !== undefined && <th>LP</th>}
+                                  {chart.entries[0]?.lingkarPinggul !== undefined && <th>LPG</th>}
+                                  {chart.entries[0]?.lingkarPaha !== undefined && <th>LPH</th>}
+                                  {chart.entries[0]?.lingkarBawah !== undefined && <th>LBW</th>}
+                                </tr>
+                              </thead>
+                              <tbody className={isDarkMode ? 'text-white' : 'text-slate-800'}>
+                                {chart.entries.map((e: any, idx: number) => (
+                                  <tr key={idx} className={idx % 2 === 0 ? (isDarkMode ? 'bg-slate-900/50' : 'bg-slate-50') : ''}>
+                                    <td className="text-left font-black text-emerald-500">{e.size}</td>
+                                    <td>{e.tinggi}</td>
+                                    {e.lebarDada !== undefined && <td>{e.lebarDada}</td>}
+                                    {e.lebarBahu !== undefined && <td>{e.lebarBahu}</td>}
+                                    {e.lenganPanjang !== undefined && <td>{e.lenganPanjang}</td>}
+                                    {e.lenganPendek !== undefined && <td>{e.lenganPendek}</td>}
+                                    {e.kerah !== undefined && <td>{e.kerah}</td>}
+                                    {e.manset !== undefined && <td>{e.manset}</td>}
+                                    {e.lingkarPinggang !== undefined && <td>{e.lingkarPinggang}</td>}
+                                    {e.lingkarPinggul !== undefined && <td>{e.lingkarPinggul}</td>}
+                                    {e.lingkarPaha !== undefined && <td>{e.lingkarPaha}</td>}
+                                    {e.lingkarBawah !== undefined && <td>{e.lingkarBawah}</td>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <p className="text-[7px] font-bold text-slate-400 text-center uppercase tracking-widest leading-relaxed">Klik ikon pensil untuk merubah angka di atas</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="p-4 rounded-3xl border border-dashed border-[#10b981] space-y-3">
+                    <input className={`w-full px-4 py-3 rounded-2xl text-xs font-black uppercase border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`} placeholder="Nama Chart (Contoh: Kemeja)" value={newChartName} onChange={e => setNewChartName(e.target.value)} />
+                    <button onClick={() => {
+                      if (!newChartName.trim()) return;
+                      const newChart = { id: Math.random().toString(36).substr(2, 9), name: newChartName, entries: [] };
+                      setSizeCharts([...sizeCharts, newChart]);
+                      setNewChartName('');
+                      setEditingChartId(newChart.id);
+                    }} className="w-full py-4 bg-[#10b981] text-white rounded-2xl font-black text-[10px] uppercase shadow-md active:scale-95 transition-all flex items-center justify-center gap-2">
+                      <Plus size={16} /> Buat Chart Baru
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-6 animate-in slide-in-from-right">
+                  {sizeCharts.find(c => c.id === editingChartId) && (
+                    <>
+                      <div className="p-4 rounded-3xl bg-purple-50 border border-purple-100">
+                        <p className="text-[10px] font-black text-purple-600 uppercase mb-1">Editing Chart</p>
+                        <p className="text-xs font-bold text-slate-800">{sizeCharts.find(c => c.id === editingChartId)?.name}</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center px-1">
+                          <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Daftar Ukuran</h5>
+                          <button onClick={() => {
+                            const chart = sizeCharts.find(c => c.id === editingChartId);
+                            if (chart) {
+                              const newEntry = { size: 'NEW', tinggi: 0, lebarDada: 0, lebarBahu: 0, lenganPanjang: 0, lenganPendek: 0, kerah: 0, manset: 0 };
+                              setSizeCharts(sizeCharts.map(c => c.id === editingChartId ? { ...c, entries: [...c.entries, newEntry] } : c));
+                            }
+                          }} className="flex items-center gap-1 text-[9px] font-black text-[#10b981] uppercase bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                            <Plus size={12} /> Tambah Size
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {sizeCharts.find(c => c.id === editingChartId)?.entries.map((entry: any, eIdx: number) => (
+                            <div key={eIdx} className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100 shadow-sm'}`}>
+                              <div className="flex justify-between items-center mb-3">
+                                <input
+                                  className={`w-16 rounded-lg px-2 py-1 text-xs font-black text-center uppercase border focus:outline-none ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                                  value={entry.size}
+                                  onChange={(ev) => {
+                                    const nextCharts = [...sizeCharts];
+                                    const cIdx = nextCharts.findIndex(c => c.id === editingChartId);
+                                    nextCharts[cIdx].entries[eIdx].size = ev.target.value.toUpperCase();
+                                    setSizeCharts(nextCharts);
+                                  }}
+                                />
+                                <button onClick={() => {
+                                  setSizeCharts(sizeCharts.map(c => c.id === editingChartId ? { ...c, entries: c.entries.filter((_: any, idx: number) => idx !== eIdx) } : c));
+                                }} className="text-red-400 hover:text-red-600 p-1"><X size={14} /></button>
+                              </div>
+
+                              <div className="grid grid-cols-4 gap-2">
+                                {[
+                                  { label: 'T', key: 'tinggi' },
+                                  { label: 'LD', key: 'lebarDada' },
+                                  { label: 'LB', key: 'lebarBahu' },
+                                  { label: 'LPj', key: 'lenganPanjang' },
+                                  { label: 'LPd', key: 'lenganPendek' },
+                                  { label: 'K', key: 'kerah' },
+                                  { label: 'M', key: 'manset' },
+                                  { label: 'LP', key: 'lingkarPinggang' },
+                                  { label: 'LPG', key: 'lingkarPinggul' },
+                                  { label: 'LPH', key: 'lingkarPaha' },
+                                  { label: 'LBW', key: 'lingkarBawah' }
+                                ].map((field) => (
+                                  entry[field.key] !== undefined || (sizeCharts.find(c => c.id === editingChartId)?.name.toLowerCase().includes('celana') && ['lingkarPinggang', 'lingkarPinggul', 'lingkarPaha', 'lingkarBawah', 'tinggi'].includes(field.key)) || (sizeCharts.find(c => c.id === editingChartId)?.name.toLowerCase().includes('kemeja') && ['tinggi', 'lebarDada', 'lebarBahu', 'lenganPanjang', 'lenganPendek', 'kerah', 'manset'].includes(field.key)) ? (
+                                    <div key={field.key} className="flex flex-col gap-1">
+                                      <span className="text-[7px] font-black text-slate-400 text-center uppercase">{field.label}</span>
+                                      <input
+                                        type="number"
+                                        className={`w-full rounded-lg py-1 text-[10px] font-bold text-center border focus:outline-none ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}
+                                        value={entry[field.key] || ''}
+                                        onChange={(ev) => {
+                                          const nextCharts = [...sizeCharts];
+                                          const cIdx = nextCharts.findIndex(c => c.id === editingChartId);
+                                          nextCharts[cIdx].entries[eIdx][field.key] = parseInt(ev.target.value) || 0;
+                                          setSizeCharts(nextCharts);
+                                        }}
+                                      />
+                                    </div>
+                                  ) : null
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button onClick={() => setEditingChartId(null)} className="w-full py-4 bg-emerald-500 text-white font-black text-[10px] uppercase rounded-3xl shadow-lg active:scale-95 transition-all">Selesai & Simpan</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info Popup */}
       {showInfoPopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
@@ -885,7 +1155,7 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
               <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center border-4 border-emerald-50 shadow-xl"><Sparkles size={40} /></div>
               <div>
                 <h3 className="text-xl font-black mb-2">Informasi Pembuat</h3>
-                <p className="text-sm px-2 font-medium opacity-80">Saya <span className="text-[#10b981] font-black">Maris</span> membuat aplikasi beta ini untuk mempermudah dalam pencatatan kerjaan agar tidak ada data ganda dan semoga bisa bermanfaat <span className="italic">beta 2.0</span> project.</p>
+                <p className="text-sm px-2 font-medium opacity-80">Saya <span className="text-[#10b981] font-black">Maris</span> membuat aplikasi ini untuk mempermudah dalam pencatatan kerjaan agar tidak ada data ganda dan semoga bisa bermanfaat <span className="italic font-black text-[#10b981]">v1.0.3 Updater</span> project.</p>
               </div>
               <button onClick={() => setShowInfoPopup(false)} className="w-full py-4 bg-[#10b981] text-white rounded-3xl font-black uppercase tracking-widest text-xs">Oke, Mengerti</button>
             </div>
@@ -927,7 +1197,26 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                     <button onClick={handleAddNewPrice} className="bg-[#10b981] text-white px-4 py-2 rounded-xl font-black text-[10px]">SAVE</button>
                   </div>
                 </div>
-              ) : <button onClick={() => setIsAddingNewPrice(true)} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:border-[#10b981] transition-all"><Plus size={16} className="inline mr-2" /> Tambah Harga Baru</button>}
+              ) : (
+                <>
+                  <button onClick={() => setIsAddingNewPrice(true)} className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:border-[#10b981] transition-all">
+                    <Plus size={16} className="inline mr-2" /> Tambah Harga Baru
+                  </button>
+                  <button
+                    onClick={() => {
+                      triggerConfirm({
+                        title: 'Gunakan Harga Default?',
+                        message: 'Semua perubahan harga manual akan hilang.',
+                        type: 'warning',
+                        onConfirm: () => setPrices(DEFAULT_PRICE_LIST)
+                      });
+                    }}
+                    className="w-full py-3 mt-4 text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 hover:text-amber-500 transition-all"
+                  >
+                    <RotateCcw size={12} /> Reset ke Harga Default
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -935,5 +1224,15 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     </div>
   );
 };
+
+const InfoBox = ({ label, value, icon, isDarkMode }: any) => (
+  <div className={`flex items-center gap-4 p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+    <div className="p-2 bg-slate-50 rounded-xl">{icon}</div>
+    <div className="flex flex-col">
+      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
+      <span className="text-[11px] font-bold uppercase">{value || '-'}</span>
+    </div>
+  </div>
+);
 
 export default AccountScreen;

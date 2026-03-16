@@ -1,7 +1,11 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://rcaqtzgmepyxgszcwldr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjYXF0emdtZXB5eGdzemN3bGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4ODI1NzAsImV4cCI6MjA4NTQ1ODU3MH0.qviq6aHo5weaTN3_e6loWO1TZ6vlnDcN_jbkGwdja30';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+
+if (!import.meta.env.VITE_SUPABASE_URL) {
+    console.warn('⚠️ VITE_SUPABASE_URL is missing in .env');
+}
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -41,6 +45,7 @@ export interface OrderDB {
     deskripsi_pekerjaan?: string;
     embroidery_status?: string;
     embroidery_notes?: string;
+    completed_at?: string | null;
     created_at?: string;
     updated_at?: string;
     deleted_at?: string;
@@ -180,6 +185,34 @@ export const supabaseService = {
         return data || [];
     },
 
+    async getDeletedOrders(namaPenjahit: string): Promise<OrderDB[]> {
+        const { data, error } = await supabase
+            .from('orders')
+            .select('*')
+            .not('deleted_at', 'is', null)
+            .ilike('nama_penjahit', namaPenjahit)
+            .order('deleted_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching deleted orders:', error);
+            return [];
+        }
+        return data || [];
+    },
+
+    async deleteOrderPermanently(id: string): Promise<boolean> {
+        const { error } = await supabase
+            .from('orders')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting order permanently:', error);
+            return false;
+        }
+        return true;
+    },
+
     async searchOrdersByCode(kodeBarang: string): Promise<OrderDB[]> {
         const { data, error } = await supabase
             .from('orders')
@@ -216,7 +249,7 @@ export const supabaseService = {
             if (!targetId) {
                 const { data: existing } = await supabase
                     .from('orders')
-                    .select('id')
+                    .select('id, nama_penjahit')
                     .eq('kode_barang', order.kode_barang)
                     .eq('nama_penjahit', order.nama_penjahit)
                     .maybeSingle();
@@ -232,7 +265,7 @@ export const supabaseService = {
                     .eq('id', targetId)
                     .maybeSingle();
 
-                if (existing && existing.nama_penjahit !== order.nama_penjahit) {
+                if (existing && existing.nama_penjahit.toLowerCase().trim() !== order.nama_penjahit.toLowerCase().trim()) {
                     console.warn(`Unauthorized update attempt for record ${targetId} by ${order.nama_penjahit}. Owner is ${existing.nama_penjahit}`);
                     return null;
                 }
@@ -240,11 +273,11 @@ export const supabaseService = {
 
             const { data, error } = await supabase
                 .from('orders')
-                .upsert([{
+                .upsert({
                     ...order,
                     id: targetId,
                     updated_at: new Date().toISOString()
-                }])
+                })
                 .select()
                 .single();
 
@@ -259,12 +292,12 @@ export const supabaseService = {
         }
     },
 
-    subscribeToOrders(callback: () => void): RealtimeChannel {
+    subscribeToOrders(callback: (payload: any) => void): RealtimeChannel {
         return supabase
-            .channel('orders_channel')
+            .channel('orders_global_sync')
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
-                () => callback()
+                (payload) => callback(payload)
             )
             .subscribe();
     },

@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Loader2, Save, Plus, Trash2, ChevronLeft, AlertTriangle, Upload, FileText, Package, Scissors, RotateCcw } from 'lucide-react';
-import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS, PaymentStatus } from '../types';
+import { Camera, Loader2, Save, Plus, Trash2, ChevronLeft, AlertTriangle, Upload, FileText, Package, Scissors, RotateCcw, User, UserCheck, ShieldCheck, Calendar, Clock, Layers, Sparkles, Ruler, Info } from 'lucide-react';
+import { OrderItem, SakuColor, SakuType, JobStatus, Priority, BRAD_MODELS, PaymentStatus, JenisBarang, ModelCelana, BahanCelana, BahanKemeja, JenisSakuRompi, SizeChart, ModelRompi } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
+import SizeGroupingSection from '../components/SizeGrouping/SizeGroupingSection';
 
 import { syncService } from '../services/syncService';
 
@@ -16,6 +17,7 @@ interface ScanScreenProps {
   scanResultGlobal: Partial<OrderItem> | null;
   onStartScan: (base64: string) => void;
   setScanResultGlobal: (res: Partial<OrderItem> | null) => void;
+  triggerConfirm: (config: any) => void;
 }
 
 const GREETINGS = [
@@ -47,18 +49,24 @@ const INITIAL_FORM_STATE: Partial<OrderItem> = {
   deskripsiPekerjaan: '',
   isManual: true,
   createCalendarReminder: false,
-  modelDetail: ''
+  modelDetail: '',
+  jenisBarang: undefined
 };
 
 const ScanScreen: React.FC<ScanScreenProps> = ({
   onSave, onCancel, isDarkMode, existingOrders = [],
-  isScanningGlobal, scanResultGlobal, onStartScan, setScanResultGlobal
+  isScanningGlobal, scanResultGlobal, onStartScan, setScanResultGlobal, triggerConfirm
 }) => {
   const [greeting, setGreeting] = useState(GREETINGS[0]);
   const [isManualMode, setIsManualMode] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [duplicateOwner, setDuplicateOwner] = useState<string | null>(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
+  const [selectedSizeChart, setSelectedSizeChart] = useState<string | null>(null);
+  const [availableSizeCharts, setAvailableSizeCharts] = useState<SizeChart[]>([]);
+  const [showSizeChartPicker, setShowSizeChartPicker] = useState<number | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set([0]));
 
   const [formData, setFormData] = useState<Partial<OrderItem>>(INITIAL_FORM_STATE);
 
@@ -66,9 +74,55 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
+  // Helper function to get custom measurement fields based on jenis barang
+  const getCustomMeasurementFields = (jenisBarang?: JenisBarang) => {
+    if (jenisBarang === JenisBarang.CELANA) {
+      return [
+        { label: 'T', key: 'tinggi', fullName: 'Tinggi/Panjang' },
+        { label: 'LP', key: 'lingkarPaha', fullName: 'Lingkar Paha' },
+        { label: 'LPG', key: 'lingkarPinggang', fullName: 'Lingkar Pinggang' },
+        { label: 'LPH', key: 'lingkarPinggul', fullName: 'Lingkar Pinggul' },
+        { label: 'LBW', key: 'lingkarBawah', fullName: 'Lingkar Bawah' }
+      ];
+    } else if (jenisBarang === JenisBarang.ROMPI) {
+      return [
+        { label: 'T', key: 'tinggi', fullName: 'Tinggi Badan' },
+        { label: 'LD', key: 'lebarDada', fullName: 'Lebar Dada' },
+        { label: 'LB', key: 'lebarBahu', fullName: 'Lebar Bahu' },
+        { label: 'K', key: 'kerah', fullName: 'Kerah' },
+        { label: 'M', key: 'manset', fullName: 'Manset' }
+      ];
+    } else {
+      // Kemeja (default)
+      return [
+        { label: 'T', key: 'tinggi', fullName: 'Tinggi Badan' },
+        { label: 'LD', key: 'lebarDada', fullName: 'Lebar Dada' },
+        { label: 'LB', key: 'lebarBahu', fullName: 'Lebar Bahu' },
+        { label: 'LPj', key: 'lenganPanjang', fullName: 'Lengan Panjang' },
+        { label: 'LPd', key: 'lenganPendek', fullName: 'Lengan Pendek' },
+        { label: 'K', key: 'kerah', fullName: 'Kerah' },
+        { label: 'M', key: 'manset', fullName: 'Manset' },
+        { label: 'LPr', key: 'lingPerut', fullName: 'Lingkar Perut' },
+        { label: 'LPg', key: 'lingPinggul', fullName: 'Lingkar Pinggul' }
+      ];
+    }
+  };
+
+  // Helper function to check if custom measurements has any non-zero values
+  const hasCustomMeasurements = (measurements?: any) => {
+    if (!measurements) return false;
+    return Object.values(measurements).some(val => val && val !== 0);
+  };
+
   useEffect(() => {
     const profileName = localStorage.getItem('profileName') || 'Nama Anda';
     setFormData(prev => ({ ...prev, namaPenjahit: profileName }));
+    
+    // Load size charts
+    const savedCharts = localStorage.getItem('bradwear_size_charts');
+    if (savedCharts) {
+      setAvailableSizeCharts(JSON.parse(savedCharts));
+    }
   }, []);
 
   useEffect(() => {
@@ -90,11 +144,59 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
   useEffect(() => {
     if (scanResultGlobal) {
+      // Auto-detect jenis barang dari deskripsi atau dari hasil scan langsung
+      let detectedJenis: JenisBarang | undefined = scanResultGlobal.jenisBarang as JenisBarang;
+      
+      // Jika belum terdeteksi dari scan, coba deteksi dari deskripsi
+      if (!detectedJenis) {
+        const desc = (scanResultGlobal.deskripsiPekerjaan || '').toLowerCase();
+        
+        if (desc.includes('celana') || desc.includes('pant') || desc.includes('trouser')) {
+          detectedJenis = JenisBarang.CELANA;
+        } else if (desc.includes('rompi') || desc.includes('vest')) {
+          detectedJenis = JenisBarang.ROMPI;
+        } else if (desc.includes('kemeja') || desc.includes('shirt') || desc.includes('brad')) {
+          detectedJenis = JenisBarang.KEMEJA;
+        }
+      }
+
+      // Auto-detect bahan kemeja dari deskripsi
+      let detectedBahan: BahanKemeja | undefined;
+      if (!detectedJenis || detectedJenis === JenisBarang.KEMEJA) {
+        const desc = (scanResultGlobal.deskripsiPekerjaan || '').toLowerCase();
+        
+        if (desc.includes('denim')) {
+          detectedBahan = BahanKemeja.DENIM;
+        } else if (desc.includes('maryland')) {
+          detectedBahan = BahanKemeja.MARYLAND;
+        } else if (desc.includes('american drill') || desc.includes('american dril')) {
+          detectedBahan = BahanKemeja.AMERICAN_DRILL;
+        } else if (desc.includes('japan drill') || desc.includes('japan dril')) {
+          detectedBahan = BahanKemeja.JAPAN_DRILL;
+        } else if (desc.includes('drill') || desc.includes('dril')) {
+          detectedBahan = BahanKemeja.AMERICAN_DRILL;
+        } else if (desc.includes('oxford')) {
+          detectedBahan = BahanKemeja.OXFORD;
+        } else if (desc.includes('katun') || desc.includes('cotton')) {
+          detectedBahan = BahanKemeja.KATUN;
+        } else if (desc.includes('polyester') || desc.includes('poly')) {
+          detectedBahan = BahanKemeja.POLYESTER;
+        } else if (desc.includes('tropical')) {
+          detectedBahan = BahanKemeja.TROPICAL;
+        }
+      }
+
       setFormData(prev => ({
         ...prev,
         ...scanResultGlobal,
         namaPenjahit: scanResultGlobal.namaPenjahit || prev.namaPenjahit || '',
-        isManual: false
+        isManual: false,
+        jenisBarang: detectedJenis || prev.jenisBarang,
+        bahanKemeja: detectedBahan || scanResultGlobal.bahanKemeja || prev.bahanKemeja,
+        sizeDetails: scanResultGlobal.sizeDetails?.map(sd => ({
+          ...sd,
+          bahanKemeja: sd.bahanKemeja || detectedBahan
+        })) || prev.sizeDetails
       }));
       setIsManualMode(false);
     }
@@ -103,17 +205,29 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   useEffect(() => {
     const checkDuplicate = async () => {
       if (formData.kodeBarang) {
+        // Jangan tampilkan warning untuk kode barang TDP
+        const isTDPCode = formData.kodeBarang.toUpperCase().includes('TDP');
+        
+        if (isTDPCode) {
+          setShowDuplicateWarning(false);
+          setDuplicateOwner(null);
+          return;
+        }
+
         // Local check
-        const localDup = existingOrders.find(o => o.kodeBarang === formData.kodeBarang);
+        const localDup = existingOrders.find(o => o.kodeBarang === formData.kodeBarang && !o.deletedAt);
         // Global check (async)
         const globalDup = await syncService.checkDuplicateCode(formData.kodeBarang);
 
-        const isDifferentOwner = (globalDup && globalDup.namaPenjahit !== formData.namaPenjahit) ||
-          (localDup && localDup.namaPenjahit !== formData.namaPenjahit);
-
-        if (isDifferentOwner) {
+        // Check if duplicate exists (from any user, including same user)
+        const hasDuplicate = localDup || globalDup;
+        
+        if (hasDuplicate) {
+          const ownerName = (globalDup?.namaPenjahit || localDup?.namaPenjahit || null);
+          const isDifferentOwner = ownerName && ownerName !== formData.namaPenjahit;
+          
           setShowDuplicateWarning(true);
-          setDuplicateOwner((globalDup?.namaPenjahit || localDup?.namaPenjahit || null));
+          setDuplicateOwner(ownerName);
         } else {
           setShowDuplicateWarning(false);
           setDuplicateOwner(null);
@@ -129,21 +243,79 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
   useEffect(() => {
     if (formData.sizeDetails) {
-      const total = formData.sizeDetails.reduce((sum, item) => sum + (item.jumlah || 0), 0);
+      const total = formData.sizeDetails.reduce((sum, item) => {
+        if (item.sizes && item.sizes.length > 0) {
+          // Hitung dari array sizes
+          return sum + item.sizes.reduce((s, sz) => s + (sz.jumlah || 0), 0);
+        }
+        // Hitung dari jumlah langsung
+        return sum + (item.jumlah || 0);
+      }, 0);
       setFormData(prev => ({ ...prev, jumlahPesanan: total }));
     }
   }, [formData.sizeDetails]);
+
+  // Auto-detect bahan kemeja dari deskripsi pekerjaan
+  useEffect(() => {
+    if (formData.deskripsiPekerjaan && (!formData.jenisBarang || formData.jenisBarang === JenisBarang.KEMEJA)) {
+      const desc = formData.deskripsiPekerjaan.toLowerCase();
+      let detectedBahan: BahanKemeja | undefined;
+
+      // Deteksi kata kunci bahan
+      if (desc.includes('denim')) {
+        detectedBahan = BahanKemeja.DENIM;
+      } else if (desc.includes('maryland')) {
+        detectedBahan = BahanKemeja.MARYLAND;
+      } else if (desc.includes('american drill') || desc.includes('american dril')) {
+        detectedBahan = BahanKemeja.AMERICAN_DRILL;
+      } else if (desc.includes('japan drill') || desc.includes('japan dril')) {
+        detectedBahan = BahanKemeja.JAPAN_DRILL;
+      } else if (desc.includes('drill') || desc.includes('dril')) {
+        // Default drill ke American Drill
+        detectedBahan = BahanKemeja.AMERICAN_DRILL;
+      } else if (desc.includes('oxford')) {
+        detectedBahan = BahanKemeja.OXFORD;
+      } else if (desc.includes('katun') || desc.includes('cotton')) {
+        detectedBahan = BahanKemeja.KATUN;
+      } else if (desc.includes('polyester') || desc.includes('poly')) {
+        detectedBahan = BahanKemeja.POLYESTER;
+      } else if (desc.includes('tropical')) {
+        detectedBahan = BahanKemeja.TROPICAL;
+      }
+
+      // Auto-fill ke semua sizeDetails jika terdeteksi
+      if (detectedBahan && formData.sizeDetails && formData.sizeDetails.length > 0) {
+        const needsUpdate = formData.sizeDetails.some(sd => !sd.bahanKemeja);
+        
+        if (needsUpdate) {
+          setFormData(prev => ({
+            ...prev,
+            bahanKemeja: detectedBahan,
+            sizeDetails: prev.sizeDetails?.map(sd => ({
+              ...sd,
+              bahanKemeja: sd.bahanKemeja || detectedBahan
+            }))
+          }));
+        }
+      }
+    }
+  }, [formData.deskripsiPekerjaan, formData.jenisBarang]);
 
   const handleResetForm = () => {
     const message = scanResultGlobal
       ? "Batalkan hasil scan dan kembali ke pemilihan metode?"
       : "Hapus semua input dan kembali ke pemilihan metode?";
 
-    if (window.confirm(message)) {
-      setScanResultGlobal(null);
-      setIsManualMode(false);
-      setFormData(INITIAL_FORM_STATE);
-    }
+    triggerConfirm({
+      title: 'Reset Form?',
+      message: message,
+      type: 'warning',
+      onConfirm: () => {
+        setScanResultGlobal(null);
+        setIsManualMode(false);
+        setFormData(INITIAL_FORM_STATE);
+      }
+    });
   };
 
   const compressImage = (file: File): Promise<string> => {
@@ -191,24 +363,198 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     setIsManualMode(true);
     setScanResultGlobal(null);
     setFormData(prev => ({
-      ...prev, isManual: true,
+      ...prev, 
+      isManual: true,
       namaPenjahit: 'Nama Anda',
-      sizeDetails: [{ size: '', jumlah: 0, gender: 'Pria', tangan: 'Pendek', namaPerSize: '' }]
+      jenisBarang: undefined,
+      sizeDetails: [{
+        size: '', 
+        jumlah: 0, 
+        gender: 'Pria', 
+        tangan: 'Pendek', 
+        namaPerSize: '',
+        model: prev.model || 'Brad V2',
+        warna: prev.warna || '',
+        sakuType: prev.sakuType || SakuType.POLOS,
+        sakuColor: prev.sakuColor || SakuColor.ABU,
+        isCustomSize: false,
+        customMeasurements: { tinggi: 0, lebarDada: 0, lebarBahu: 0, lenganPanjang: 0, lenganPendek: 0, kerah: 0, manset: 0 }
+      }]
     }));
   };
 
   const handleAddSize = () => {
-    setFormData(prev => ({ ...prev, sizeDetails: [...(prev.sizeDetails || []), { size: '', jumlah: 0, gender: 'Pria', tangan: 'Pendek', namaPerSize: '' }] }));
+    setFormData(prev => {
+      const baseDetail = {
+        size: '', 
+        jumlah: 1, 
+        gender: 'Pria' as const, 
+        tangan: 'Pendek' as const, 
+        namaPerSize: '',
+        warna: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.warna) || prev.warna || '',
+        isCustomSize: false,
+        customMeasurements: { tinggi: 0, lebarDada: 0, lebarBahu: 0, lenganPanjang: 0, lenganPendek: 0, kerah: 0, manset: 0 }
+      };
+
+      let newDetail: any = { ...baseDetail };
+
+      // Tambahkan field sesuai jenis barang
+      if (prev.jenisBarang === JenisBarang.KEMEJA || !prev.jenisBarang) {
+        newDetail = {
+          ...newDetail,
+          model: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.model) || prev.model || 'Brad V2',
+          sakuType: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.sakuType) || prev.sakuType || SakuType.POLOS,
+          sakuColor: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.sakuColor) || prev.sakuColor || SakuColor.ABU,
+        };
+      } else if (prev.jenisBarang === JenisBarang.ROMPI) {
+        newDetail = {
+          ...newDetail,
+          jenisSakuRompi: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.jenisSakuRompi) || JenisSakuRompi.DALAM,
+        };
+      } else if (prev.jenisBarang === JenisBarang.CELANA) {
+        newDetail = {
+          ...newDetail,
+          modelCelana: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.modelCelana) || ModelCelana.WARRIOR,
+          bahanCelana: (prev.sizeDetails?.[prev.sizeDetails.length - 1]?.bahanCelana) || BahanCelana.AMERICAN_DRILL,
+        };
+      }
+
+      return {
+        ...prev,
+        sizeDetails: [...(prev.sizeDetails || []), newDetail]
+      };
+    });
+    
+    // Expand item yang baru ditambahkan
+    setExpandedItems(prev => {
+      const newSet = new Set(prev);
+      newSet.add((formData.sizeDetails?.length || 0));
+      return newSet;
+    });
+  };
+
+  const handleAddSizeToItem = (itemIndex: number) => {
+    setFormData(prev => {
+      const next = [...(prev.sizeDetails || [])];
+      const currentItem = next[itemIndex];
+      
+      if (!currentItem) return prev;
+
+      // Inisialisasi array sizes jika belum ada
+      if (!currentItem.sizes) {
+        currentItem.sizes = [
+          { size: currentItem.size, jumlah: currentItem.jumlah }
+        ];
+      }
+
+      // Tambah size baru
+      currentItem.sizes.push({ size: '', jumlah: 1 });
+
+      return { ...prev, sizeDetails: next };
+    });
+  };
+
+  const handleRemoveSizeFromItem = (itemIndex: number, sizeIndex: number) => {
+    setFormData(prev => {
+      const next = [...(prev.sizeDetails || [])];
+      const currentItem = next[itemIndex];
+      
+      if (!currentItem?.sizes) return prev;
+
+      // Hapus size
+      currentItem.sizes.splice(sizeIndex, 1);
+
+      // Jika hanya tersisa 1 size, kembalikan ke format normal
+      if (currentItem.sizes.length === 1) {
+        currentItem.size = currentItem.sizes[0].size;
+        currentItem.jumlah = currentItem.sizes[0].jumlah;
+        delete currentItem.sizes;
+      }
+
+      return { ...prev, sizeDetails: next };
+    });
+  };
+
+  const handleUpdateSize = (itemIndex: number, sizeIndex: number, field: 'size' | 'jumlah' | 'gender' | 'tangan', value: any) => {
+    setFormData(prev => {
+      const next = [...(prev.sizeDetails || [])];
+      const currentItem = next[itemIndex];
+      
+      if (!currentItem?.sizes) return prev;
+
+      if (field === 'jumlah') {
+        currentItem.sizes[sizeIndex].jumlah = parseInt(value) || 0;
+      } else if (field === 'gender') {
+        currentItem.sizes[sizeIndex].gender = value;
+      } else if (field === 'tangan') {
+        currentItem.sizes[sizeIndex].tangan = value;
+      } else {
+        currentItem.sizes[sizeIndex].size = value;
+      }
+
+      return { ...prev, sizeDetails: next };
+    });
   };
 
   const handleRemoveSize = (index: number) => {
     setFormData(prev => ({ ...prev, sizeDetails: prev.sizeDetails?.filter((_, i) => i !== index) }));
   };
 
+  const handleApplySizeChart = (itemIndex: number, chartId: string, sizeFromChart: string) => {
+    const chart = availableSizeCharts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    const entry = chart.entries.find(e => e.size === sizeFromChart);
+    if (!entry) return;
+
+    setFormData(prev => {
+      const next = [...(prev.sizeDetails || [])];
+      
+      // Tentukan measurements berdasarkan jenis barang
+      let customMeasurements: any = {};
+      
+      if (prev.jenisBarang === JenisBarang.CELANA) {
+        // Field untuk celana
+        customMeasurements = {
+          tinggi: entry.tinggi || (entry as any).panjang || 0,
+          lingkarPaha: (entry as any).lingkarPaha || (entry as any).LP || 0,
+          lingkarPinggang: (entry as any).lingkarPinggang || (entry as any).LPG || 0,
+          lingkarPinggul: (entry as any).lingkarPinggul || (entry as any).LPH || 0,
+          lingkarBawah: (entry as any).lingkarBawah || (entry as any).LBW || 0
+        };
+      } else {
+        // Field untuk kemeja (default)
+        customMeasurements = {
+          tinggi: entry.tinggi || 0,
+          lebarDada: entry.lebarDada || 0,
+          lebarBahu: entry.lebarBahu || 0,
+          lenganPanjang: entry.lenganPanjang || 0,
+          lenganPendek: entry.lenganPendek || 0,
+          kerah: entry.kerah || 0,
+          manset: entry.manset || 0
+        };
+      }
+      
+      next[itemIndex] = {
+        ...next[itemIndex],
+        size: entry.size,
+        isCustomSize: true,
+        customMeasurements
+      };
+      return { ...prev, sizeDetails: next };
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.namaPenjahit || !formData.kodeBarang) {
-      alert("Nama Penjahit dan Kode Barang wajib diisi!"); return;
+      triggerConfirm({
+        title: 'Data Tidak Lengkap',
+        message: 'Nama Penjahit dan Kode Barang wajib diisi!',
+        type: 'danger',
+        onConfirm: () => { } // Just close
+      });
+      return;
     }
 
     if (showDuplicateWarning) {
@@ -216,15 +562,12 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     } else {
       const orderToSave = formData as OrderItem;
       onSave(orderToSave);
-      // Auto push to cloud handled by parent usually, but ensuring it here if needed
-      syncService.pushOrderToCloud(orderToSave);
     }
   };
 
   const handleConfirmDuplicate = () => {
     const orderToSave = formData as OrderItem;
     onSave(orderToSave);
-    syncService.pushOrderToCloud(orderToSave);
     setShowConfirmPopup(false);
   };
 
@@ -266,10 +609,21 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
             <div className="space-y-2">
               <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Peringatan Kode Barang</h4>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                Kode ini sudah di simpan oleh <span className="text-emerald-500 font-black">{duplicateOwner || 'user pertama'}</span>.
-                <br /><br />
-                Apakah kamu mengerjakan kode barang yang sama?
-                {isDarkMode ? <br /> : ' '}Jika iya maka kode barang bisa di simpan.
+                {duplicateOwner === formData.namaPenjahit ? (
+                  <>
+                    Kode <span className="text-amber-500 font-black">{formData.kodeBarang}</span> sudah pernah kamu simpan sebelumnya.
+                    <br /><br />
+                    Apakah ini pekerjaan baru dengan kode yang sama?
+                    {isDarkMode ? <br /> : ' '}Jika iya, data akan ditambahkan sebagai entry baru.
+                  </>
+                ) : (
+                  <>
+                    Kode ini sudah di simpan oleh <span className="text-emerald-500 font-black">{duplicateOwner || 'user lain'}</span>.
+                    <br /><br />
+                    Apakah kamu mengerjakan kode barang yang sama?
+                    {isDarkMode ? <br /> : ' '}Jika iya maka kode barang bisa di simpan.
+                  </>
+                )}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -286,6 +640,62 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                 Tidak, Ubah
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Info Popup - Singkatan Ukuran */}
+      {showInfoPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+          <div className={`relative w-full max-w-md rounded-[3rem] p-8 shadow-2xl ${isDarkMode ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
+                  <Info size={20} />
+                </div>
+                <h4 className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Singkatan Ukuran</h4>
+              </div>
+              <button onClick={() => setShowInfoPopup(false)} className="text-slate-400 hover:text-red-500 transition-colors">
+                <ChevronLeft size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* Kemeja */}
+              <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-emerald-50'}`}>
+                <h5 className="text-[10px] font-black text-emerald-600 uppercase mb-3">Kemeja</h5>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="font-black text-slate-400">T</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Tinggi Badan</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LD</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lebar Dada</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LB</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lebar Bahu</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPj</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lengan Panjang</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPd</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lengan Pendek</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">K</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Kerah</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">M</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Manset</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPr</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Perut</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPg</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Pinggul</span></div>
+                </div>
+              </div>
+
+              {/* Celana */}
+              <div className={`p-4 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-purple-50'}`}>
+                <h5 className="text-[10px] font-black text-purple-600 uppercase mb-3">Celana</h5>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="font-black text-slate-400">T</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Tinggi/Panjang Celana</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPG</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Pinggang</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPH</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Pinggul</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LPA</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Paha</span></div>
+                  <div className="flex justify-between"><span className="font-black text-slate-400">LBW</span><span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>Lingkar Bawah</span></div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInfoPopup(false)}
+              className="w-full mt-6 py-4 bg-blue-500 text-white rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all"
+            >
+              Mengerti
+            </button>
           </div>
         </div>
       )}
@@ -317,7 +727,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-8 max-w-3xl mx-auto">
-          {!formData.kodeBarang && !isManualMode && (
+          {!formData.kodeBarang && !isManualMode && !scanResultGlobal && (
             <div className="space-y-8">
               <div className="bg-[#10b981] rounded-[3.5rem] p-10 md:p-14 text-white flex flex-col items-center justify-center gap-8 shadow-2xl text-center">
                 <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center backdrop-blur-md border border-white/30"><FileText size={40} strokeWidth={2.5} /></div>
@@ -337,7 +747,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
           <input type="file" ref={cameraInputRef} onChange={(e) => e.target.files?.[0] && handleImageInput(e.target.files[0])} hidden accept="image/*" capture="environment" />
           <input type="file" ref={fileInputRef} onChange={(e) => e.target.files?.[0] && handleImageInput(e.target.files[0])} hidden accept="image/*" />
 
-          {(formData.kodeBarang || isManualMode) && (
+          {(formData.kodeBarang || isManualMode || scanResultGlobal) && (
             <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
 
               {!formData.isManual && formData.kodeBarang && (
@@ -351,80 +761,74 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                         NIH KERJAAN BELUM DISIMPEN!<br /><span className="opacity-80">NANTI HILANG!</span>
                       </p>
                     </div>
-                    <div className="p-3 bg-white/20 rounded-2xl">
-                      <Save size={20} className="opacity-80" />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScanResultGlobal(null);
+                          setFormData(INITIAL_FORM_STATE);
+                          setIsManualMode(false);
+                        }}
+                        className="p-3 bg-white/20 rounded-2xl hover:bg-white/30 transition-all active:scale-95"
+                        title="Scan Ulang"
+                      >
+                        <Camera size={20} className="opacity-80" />
+                      </button>
+                      <div className="p-3 bg-white/20 rounded-2xl">
+                        <Save size={20} className="opacity-80" />
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
               <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <div className="grid grid-cols-2 gap-6">
-                  <FormInput label="Penjahit" value={formData.namaPenjahit} onChange={v => setFormData({ ...formData, namaPenjahit: v })} required isDarkMode={isDarkMode} placeholder="Isi Nama Penjahit" />
-                  <FormInput
-                    label="Kode Barang"
-                    value={formData.kodeBarang}
-                    onChange={v => setFormData({ ...formData, kodeBarang: v })}
-                    required
-                    isDarkMode={isDarkMode}
-                    placeholder="Contoh: 1716"
-                    error={showDuplicateWarning}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <FormInput label="CS (Admin)" value={formData.cs} onChange={v => setFormData({ ...formData, cs: v })} isDarkMode={isDarkMode} placeholder="Nama CS" />
-                  <FormInput label="Konsumen" value={formData.konsumen} onChange={v => setFormData({ ...formData, konsumen: v })} isDarkMode={isDarkMode} placeholder="Nama Konsumen" />
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <FormInput label="Tgl Order" value={formData.tanggalOrder} onChange={v => setFormData({ ...formData, tanggalOrder: v })} isDarkMode={isDarkMode} />
-                  <FormInput label="Target" value={formData.tanggalTargetSelesai} onChange={v => setFormData({ ...formData, tanggalTargetSelesai: v })} isDarkMode={isDarkMode} placeholder="12 Jan 2026" />
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <FormInput label="Model" isDarkMode={isDarkMode}>
-                    <select className={`w-full h-14 px-5 rounded-2xl text-sm font-black transition-all outline-none focus:ring-2 focus:ring-[#10b981]/20 appearance-none bg-no-repeat bg-[right_1.25rem_center] ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-800 shadow-inner'}`} value={formData.model} onChange={(e) => setFormData({ ...formData, model: e.target.value })} style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='${isDarkMode ? '%23475569' : '%2394a3b8'}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}>
-                      {BRAD_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </FormInput>
-                  <FormInput label="Warna" value={formData.warna} onChange={v => setFormData({ ...formData, warna: v })} isDarkMode={isDarkMode} placeholder="Putih" />
-                </div>
+                <div className="grid grid-cols-1 gap-6">
+                  <FormInput label="Penjahit (Otomatis)" value={formData.namaPenjahit} readOnly isDarkMode={isDarkMode} placeholder="Nama Penjahit" icon={<User size={14} className="text-emerald-500" />} className="opacity-70 bg-slate-100/50" />
 
-                {(formData.model === 'Rompi' || formData.model === 'Celana') && (
-                  <div className="grid grid-cols-1 gap-6">
+                  <div className={`p-1 rounded-[2.5rem] ${isDarkMode ? 'bg-amber-500/5' : 'bg-amber-50/50'} border border-amber-200/50`}>
                     <FormInput
-                      label={`Nama Model ${formData.model}`}
-                      value={formData.modelDetail}
-                      onChange={v => setFormData({ ...formData, modelDetail: v })}
+                      label="Kode Barang (4 Digit)"
+                      value={formData.kodeBarang}
+                      onChange={v => setFormData({ ...formData, kodeBarang: v })}
+                      required
                       isDarkMode={isDarkMode}
-                      placeholder={`Contoh: Model ${formData.model} A`}
+                      placeholder="Contoh: 1716"
+                      error={showDuplicateWarning}
+                      icon={<FileText size={14} className="text-amber-500" />}
+                      className="!bg-transparent border-none ring-0 focus:ring-0"
                     />
                   </div>
-                )}
 
+                  <FormInput label="CS (Admin)" value={formData.cs} onChange={v => setFormData({ ...formData, cs: v })} isDarkMode={isDarkMode} placeholder="Nama CS" icon={<ShieldCheck size={14} />} />
+                  <FormInput label="Konsumen" value={formData.konsumen} onChange={v => setFormData({ ...formData, konsumen: v })} isDarkMode={isDarkMode} placeholder="Nama Konsumen" icon={<UserCheck size={14} />} />
+                  <FormInput label="Tgl Order" value={formData.tanggalOrder} onChange={v => setFormData({ ...formData, tanggalOrder: v })} isDarkMode={isDarkMode} icon={<Calendar size={14} />} />
+                  <FormInput label="Target Selesai" value={formData.tanggalTargetSelesai} onChange={v => setFormData({ ...formData, tanggalTargetSelesai: v })} isDarkMode={isDarkMode} placeholder="12 Jan 2026" icon={<Clock size={14} />} />
+                </div>
               </div>
 
+              {/* Pilihan Jenis Barang */}
               <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 ml-2 tracking-[0.2em]"><Package size={14} /> Konfigurasi Saku</h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <FormInput label="Tipe Saku" isDarkMode={isDarkMode}>
-                    <select
-                      className={`w-full h-14 px-5 rounded-2xl text-sm font-black transition-all outline-none focus:ring-2 focus:ring-[#10b981]/20 appearance-none bg-no-repeat bg-[right_1.25rem_center] ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-800 shadow-inner'}`}
-                      value={formData.sakuType}
-                      onChange={(e) => setFormData({ ...formData, sakuType: e.target.value as SakuType })}
-                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='${isDarkMode ? '%23475569' : '%2394a3b8'}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
+                <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 ml-2 tracking-[0.2em]">
+                  <Package size={14} /> Jenis Barang
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {Object.values(JenisBarang).map(jenis => (
+                    <button
+                      key={jenis}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, jenisBarang: jenis })}
+                      className={`py-5 rounded-2xl text-xs font-black uppercase transition-all ${
+                        formData.jenisBarang === jenis
+                          ? 'bg-[#10b981] text-white shadow-lg scale-[1.02]'
+                          : isDarkMode
+                          ? 'bg-slate-950 text-slate-400 border border-slate-800'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                      }`}
                     >
-                      {Object.values(SakuType).map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </FormInput>
-                  <FormInput label="Warna Saku" isDarkMode={isDarkMode}>
-                    <select
-                      className={`w-full h-14 px-5 rounded-2xl text-sm font-black transition-all outline-none focus:ring-2 focus:ring-[#10b981]/20 appearance-none bg-no-repeat bg-[right_1.25rem_center] ${isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-800 shadow-inner'}`}
-                      value={formData.sakuColor}
-                      onChange={(e) => setFormData({ ...formData, sakuColor: e.target.value as SakuColor })}
-                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='${isDarkMode ? '%23475569' : '%2394a3b8'}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-                    >
-                      {Object.values(SakuColor).map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </FormInput>
+                      {jenis}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -438,60 +842,14 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-4">
-                  {formData.sizeDetails?.map((sd, i) => (
-                    <div key={i} className={`p-6 rounded-[2.5rem] border transition-all flex flex-col gap-4 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-100 shadow-sm'}`}>
-
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ITEM #{i + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSize(i)}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 text-red-500 border border-red-100 active:scale-95 transition-all"
-                        >
-                          <Trash2 size={14} />
-                          <span className="text-[10px] font-black uppercase">HAPUS</span>
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col gap-5">
-                        <div className="grid grid-cols-4 gap-3">
-                          <input
-                            className={`col-span-3 px-5 py-4 rounded-2xl text-sm font-black uppercase outline-none focus:ring-2 focus:ring-[#10b981]/10 ${isDarkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-slate-50 text-slate-800 border-slate-100'}`}
-                            value={sd.size}
-                            placeholder={formData.model === 'Celana' ? "28-40 / Custom" : "Ukuran (S/M/L/XL)"}
-                            onChange={e => {
-                              const val = e.target.value;
-                              if (formData.model === 'Celana') {
-                                if (val === "" || /^\d*$/.test(val)) {
-                                  const next = [...formData.sizeDetails!];
-                                  next[i].size = val;
-                                  setFormData({ ...formData, sizeDetails: next });
-                                }
-                              } else {
-                                const next = [...formData.sizeDetails!];
-                                next[i].size = val;
-                                setFormData({ ...formData, sizeDetails: next });
-                              }
-                            }}
-                          />
-                          <input
-                            type="number"
-                            className={`px-3 py-4 rounded-2xl text-sm font-black text-center outline-none ${isDarkMode ? 'bg-slate-900 text-[#10b981] border-slate-800 placeholder-emerald-900/30' : 'bg-emerald-50 text-[#10b981] border-emerald-100'}`}
-                            value={sd.jumlah || ''}
-                            placeholder="Qty"
-                            onChange={e => { const next = [...formData.sizeDetails!]; next[i].jumlah = parseInt(e.target.value) || 0; setFormData({ ...formData, sizeDetails: next }); }}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <select className={`px-5 py-3 rounded-2xl text-[11px] font-black uppercase transition-all outline-none ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-800' : 'bg-slate-50 text-slate-800 border-slate-100'}`} value={sd.gender} onChange={e => { const next = [...formData.sizeDetails!]; next[i].gender = e.target.value as any; setFormData({ ...formData, sizeDetails: next }); }}><option value="Pria">Pria</option><option value="Wanita">Wanita</option></select>
-                          <select className={`px-5 py-3 rounded-2xl text-[11px] font-black uppercase transition-all outline-none ${isDarkMode ? 'bg-slate-900 text-slate-100 border-slate-800' : 'bg-slate-50 text-slate-800 border-slate-100'}`} value={sd.tangan} onChange={e => { const next = [...formData.sizeDetails!]; next[i].tangan = e.target.value as any; setFormData({ ...formData, sizeDetails: next }); }}><option value="Pendek">Pendek</option><option value="Panjang">Panjang</option></select>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <button type="button" onClick={handleAddSize} className="w-full py-6 border-2 border-dashed rounded-[2.5rem] flex items-center justify-center gap-3 text-[12px] font-black text-slate-400 uppercase transition-all hover:border-[#10b981] hover:text-[#10b981] active:scale-95"><Plus size={20} /> Tambah Item</button>
-                </div>
+                <SizeGroupingSection
+                  jenisBarang={formData.jenisBarang}
+                  sizeDetails={formData.sizeDetails || []}
+                  onSizeDetailsChange={(newSizeDetails) => {
+                    setFormData({ ...formData, sizeDetails: newSizeDetails });
+                  }}
+                  isDarkMode={isDarkMode}
+                />
               </div>
 
               <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
@@ -548,16 +906,16 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   );
 };
 
-const FormInput = ({ label, type = 'text', value, onChange, required, isDarkMode, placeholder, readOnly, children, error }: any) => (
+const FormInput = ({ label, type = 'text', value, onChange, required, isDarkMode, placeholder, readOnly, children, error, icon, className }: any) => (
   <div className="flex flex-col gap-2 flex-1">
-    <label className={`text-[11px] font-black uppercase ml-2 tracking-widest transition-colors ${error ? 'text-red-500' : 'text-slate-400'}`}>
-      {label} {required && <span className="text-red-500">*</span>}
+    <label className={`text-[11px] font-black uppercase ml-2 tracking-widest transition-colors flex items-center gap-2 ${error ? 'text-red-500' : 'text-slate-400'}`}>
+      {icon} {label} {required && <span className="text-red-500">*</span>}
     </label>
     {children ? children : (
       <input
         type={type}
         readOnly={readOnly}
-        className={`border rounded-2xl px-6 py-4 text-sm font-black transition-all outline-none focus:ring-4 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')}`}
+        className={`border rounded-2xl px-6 py-4 text-sm font-black transition-all outline-none focus:ring-4 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')} ${className}`}
         value={value || ''}
         onChange={e => !readOnly && onChange(e.target.value)}
         required={required}

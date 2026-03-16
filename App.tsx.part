@@ -1,0 +1,174 @@
+      <Suspense fallback={
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="animate-spin text-emerald-500" size={40} />
+        </div>
+      }>
+        {activeView === 'DASHBOARD' && (
+          <Dashboard
+            orders={myOrders}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDarkMode={isDarkMode}
+            unreadCount={notifications.filter(n => !n.read).length}
+            onShowNotifications={() => setShowNotifPanel(true)}
+            toggleDarkMode={() => {
+              const next = !isDarkMode;
+              setIsDarkMode(next);
+              localStorage.setItem('theme', next ? 'dark' : 'light');
+            }}
+            onScanClick={() => {
+              setShowScanMethodPopup(true);
+            }}
+            onViewHistory={handleNavigateToHistoryItem}
+            onUpdateStatus={handleUpdateStatus}
+            onUpdateOrder={handleUpdateOrder}
+            onDelete={handleDeleteOrder}
+            triggerConfirm={triggerConfirm}
+          />
+        )}
+        {activeView === 'SCAN' && (
+          <ScanScreen
+            onSave={handleAddOrder}
+            onCancel={() => setActiveView('DASHBOARD')}
+            isDarkMode={isDarkMode}
+            existingOrders={activeOrders}
+            isScanningGlobal={isScanning}
+            scanResultGlobal={scanResult}
+            onStartScan={handleGlobalScan}
+            setScanResultGlobal={setScanResult}
+            triggerConfirm={triggerConfirm}
+          />
+        )}
+        {activeView === 'HISTORY' && (
+          <HistoryScreen
+            orders={activeOrders}
+            onDelete={(id) => handleDeleteOrder(id, undefined, true)}
+            onUpdateStatus={handleUpdateStatus}
+            onUpdatePayment={handleUpdatePayment}
+            onEdit={handleEditFromHistory}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDarkMode={isDarkMode}
+            targetId={targetOrderId}
+            clearTargetId={() => setTargetOrderId(null)}
+            triggerConfirm={triggerConfirm}
+          />
+        )}
+        {activeView === 'ANALYTICS' && (
+          <AnalyticsScreen orders={myOrders} isDarkMode={isDarkMode} />
+        )}
+        {activeView === 'ACCOUNT' && (
+          <AccountScreen
+            orders={activeOrders}
+            deletedOrders={deletedOrders}
+            onRestore={handleRestoreOrder}
+            onPermanentDelete={handlePermanentDelete}
+            onUpdateOrder={handleUpdateOrder}
+            isDarkMode={isDarkMode}
+            onViewChange={setActiveView}
+            triggerConfirm={triggerConfirm}
+          />
+        )}
+        {activeView === 'FORUM_CHAT' && (
+          <ChatScreen isDarkMode={isDarkMode} />
+        )}
+      </Suspense>
+
+      {/* Global Confirmation Dialog */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+          <div className={`relative w-full max-w-xs rounded-[3rem] p-8 shadow-2xl flex flex-col text-center space-y-6 ${isDarkMode ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border-4 shadow-inner ${confirmDialog.type === 'danger' ? (isDarkMode ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-50 text-red-500 border-red-100') :
+              confirmDialog.type === 'warning' ? (isDarkMode ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-500 border-amber-100') :
+                (isDarkMode ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-blue-50 text-blue-500 border-blue-100')
+              }`}>
+              {confirmDialog.type === 'danger' ? <AlertTriangle size={32} /> :
+                confirmDialog.type === 'warning' ? <AlertCircle size={32} /> :
+                  <Info size={32} />}
+            </div>
+            <div className="space-y-2">
+              <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{confirmDialog.title}</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                {confirmDialog.message}
+              </p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm?.();
+                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                }}
+                className={`py-4 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg active:scale-95 transition-all ${confirmDialog.type === 'danger' ? 'bg-red-500 shadow-red-500/20' :
+                  confirmDialog.type === 'warning' ? 'bg-amber-500 shadow-amber-500/20' :
+                    'bg-blue-500 shadow-blue-500/20'
+                  }`}
+              >
+                {confirmDialog.onConfirm ? 'Iya, Lanjutkan' : 'Mengerti'}
+              </button>
+              {confirmDialog.onConfirm && (
+                <button
+                  onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                  className={`py-4 rounded-2xl font-black text-[10px] uppercase transition-all active:scale-95 border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
+                >
+                  Batal
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+          <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col text-center space-y-6 ${isDarkMode ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
+            <div className="w-16 h-16 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center mx-auto border-4 border-slate-200 shadow-inner">
+              <LogOut size={32} />
+            </div>
+            <div className="space-y-2">
+              <h4 className={`text-sm font-black uppercase tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Keluar Aplikasi?</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                Apakah Anda yakin ingin keluar dari aplikasi?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  const CapApp = (window as any).Capacitor?.Plugins?.App;
+                  if (CapApp) {
+                    if (CapApp.minimizeApp) {
+                      CapApp.minimizeApp();
+                    } else {
+                      CapApp.exitApp();
+                    }
+                  } else {
+                    window.close();
+                  }
+                  setShowExitConfirm(false);
+                }}
+                className="py-4 bg-red-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+              >
+                Iya, Keluar
+              </button>
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className={`py-4 rounded-2xl font-black text-[10px] uppercase transition-all active:scale-95 border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Offline Indicator */}
+      {isOffline && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-4 py-2 bg-amber-500 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 animate-in slide-in-from-top-4 duration-500">
+          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+          Mode Offline Aktif
+        </div>
+      )}
+    </Layout>
+  );
+};
+
+export default App;
