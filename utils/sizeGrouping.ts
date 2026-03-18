@@ -101,7 +101,6 @@ export function deserializeSizeDetails(
       // Handle sizes array if present
       if (sd.sizes && Array.isArray(sd.sizes) && sd.sizes.length > 0) {
         sd.sizes.forEach((sizeItem) => {
-          // Validate sizeItem
           if (!sizeItem || typeof sizeItem !== 'object') {
             console.warn('Invalid size item:', sizeItem);
             return;
@@ -118,11 +117,13 @@ export function deserializeSizeDetails(
         });
       } else {
         // Single size entry
+        // Jika ada namaPenjahit dan bukan custom size, masukkan ke namaPerSize
+        const namaPerSize = sd.namaPerSize || (!sd.isCustomSize && !sd.customMeasurements ? (sd as any).namaPenjahit : undefined);
         group.sizes.push({
           id: `size-${Date.now()}-${sizeCounter++}-${Math.random().toString(36).slice(2, 11)}`,
           size: sd.size || '',
           jumlah: sd.jumlah || 0,
-          namaPerSize: sd.namaPerSize,
+          namaPerSize,
           isCustomSize: sd.isCustomSize || false,
           customMeasurements: sd.customMeasurements || undefined,
         });

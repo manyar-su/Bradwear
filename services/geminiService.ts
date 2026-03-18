@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const OPENROUTER_KEY = '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';
+const OPENROUTER_KEY = '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';
 const DEFAULT_GEMINI_KEY = 'AIzaSyBqDDY1x9hYJmvb3AFwynxYJ5cGvmmJLTE';
 
 const PROMPT_OCR = `Extract exact text data from this order slip image. 
@@ -116,6 +116,23 @@ MAPPING RULES:
       { size: "L", jumlah: 1 }
     ]
   }
+
+  Example 1b - Tabel Laki-laki dan Perempuan:
+  Input:
+  "LAKI-LAKI (P)    PEREMPUAN (W)
+   S = 2            S = 1
+   M = 3            M = 2"
+  Output: TWO separate sizeDetails:
+  { gender: "Pria", tangan: "Panjang", sizes: [{ size: "S", jumlah: 2 }, { size: "M", jumlah: 3 }] }
+  { gender: "Wanita", tangan: "Panjang", sizes: [{ size: "S", jumlah: 1 }, { size: "M", jumlah: 2 }] }
+
+  Example 1c - Size dengan nama PJ di samping:
+  Input:
+  "Fadil: S=2, M=3
+   Ferry: L=1, XL=2"
+  Output: TWO separate sizeDetails:
+  { gender: "Pria", tangan: "Panjang", sizes: [{ size: "S", jumlah: 2, namaPerSize: "Fadil" }, { size: "M", jumlah: 3, namaPerSize: "Fadil" }] }
+  { gender: "Pria", tangan: "Panjang", sizes: [{ size: "L", jumlah: 1, namaPerSize: "Ferry" }, { size: "XL", jumlah: 2, namaPerSize: "Ferry" }] }
   
   Example 2 - Multiple Numeric Sizes (Celana):
   Input: "28 = 1, 30 = 2, 32 = 1"
@@ -282,6 +299,16 @@ MAPPING RULES:
 - Put all extra handwritten notes into 'deskripsiPekerjaan'.
 
 KUALITAS DETEKSI:
+- GENDER DETECTION (CRITICAL):
+  * "P", "Pria", "Laki", "Laki-laki", "L" → gender: "Pria"
+  * "W", "Wanita", "Perempuan", "Cewek" → gender: "Wanita"
+  * Jika ada tabel dengan kolom LAKI-LAKI dan PEREMPUAN → buat 2 sizeDetail terpisah dengan gender berbeda
+  * Default: "Pria" jika tidak ada keterangan
+- NAMA PENJAHIT PER SIZE (CRITICAL):
+  * Jika di samping size ada nama penjahit (dari TAILOR NAMES LIST), masukkan ke namaPerSize
+  * Contoh: "M - Fadil = 3" → size: "M", jumlah: 3, namaPerSize: "Fadil"
+  * Contoh: "Fadil: S=2, M=3" → 2 entries dengan namaPerSize: "Fadil"
+  * Jika nama bukan dari TAILOR NAMES LIST dan ada ukuran tubuh → itu nama konsumen (namaPerSize untuk custom)
 - Jika gender tidak tertulis eksplisit, cari simbol (P/W) atau konteks model.
 - Jika lengan tidak tertulis, asumsikan 'Pendek' kecuali ada tanda 'Pjg' atau 'Panjang'.
 - Aturan Kode Barang: Harus 4 Digit murni atau TDP. Abaikan format seperti 16/2026.
@@ -513,8 +540,9 @@ const processResult = (result: any) => {
     if (result.sizeDetails && Array.isArray(result.sizeDetails)) {
       result.sizeDetails = result.sizeDetails.map((item: any) => {
         let gender = item.gender || 'Pria';
-        const gLower = gender.toLowerCase();
-        if (gLower.includes('perempuan') || gLower.includes('wanita') || gLower === 'cewek' || gLower === 'w' || gLower === 'p') {
+        const gLower = gender.toLowerCase().trim();
+        // P = Pria (Laki-laki), W = Wanita (Perempuan)
+        if (gLower === 'w' || gLower.includes('wanita') || gLower.includes('perempuan') || gLower === 'cewek') {
           gender = 'Wanita';
         } else {
           gender = 'Pria';

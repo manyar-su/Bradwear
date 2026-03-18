@@ -530,12 +530,41 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
               <div className="grid grid-cols-5 gap-2 mt-4">
                 <button
                   onClick={() => {
-                    const text = `✨ *Rincian Kerja: ${selectedOrder.kodeBarang}* ✨\n` +
-                      `Model: ${selectedOrder.model}\n` +
-                      `Penjahit: ${selectedOrder.namaPenjahit}\n` +
-                      `Total: ${selectedOrder.jumlahPesanan} PCS`;
-                    const phoneNumber = "6283194190156";
-                    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
+                    const o = selectedOrder;
+                    const tanggal = format(new Date(), 'd MMM yyyy', { locale: idLocale });
+                    let panjangQty = 0, pendekQty = 0;
+                    const panjangSizes: string[] = [];
+                    const pendekSizes: string[] = [];
+
+                    o.sizeDetails.forEach((sd: any) => {
+                      const sizes = (sd.sizes && sd.sizes.length > 0) ? sd.sizes : [{ size: sd.size, jumlah: sd.jumlah }];
+                      sizes.forEach((sz: any) => {
+                        const entry = `${sz.size}: ${sz.jumlah} pcs`;
+                        if (sd.tangan === 'Panjang') { panjangSizes.push(entry); panjangQty += sz.jumlah; }
+                        else { pendekSizes.push(entry); pendekQty += sz.jumlah; }
+                      });
+                    });
+
+                    let text = `*REKAPAN KERJA BRADWEAR*\n`;
+                    text += `📅 ${tanggal}\n`;
+                    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+                    text += `*${o.kodeBarang}*\n`;
+                    text += `👤 Konsumen : ${o.konsumen || '-'}\n`;
+                    text += `🧑‍💼 CS       : ${o.cs || '-'}\n`;
+                    text += `👕 Model    : ${o.model}${o.warna ? ` (${o.warna})` : ''}\n\n`;
+                    if (panjangSizes.length > 0) {
+                      text += `🌀 *Lengan Panjang* (${panjangQty} pcs)\n`;
+                      panjangSizes.forEach(s => { text += `   • ${s}\n`; });
+                    }
+                    if (pendekSizes.length > 0) {
+                      text += `💠 *Lengan Pendek* (${pendekQty} pcs)\n`;
+                      pendekSizes.forEach(s => { text += `   • ${s}\n`; });
+                    }
+                    text += `\n📦 *TOTAL: ${o.jumlahPesanan} PCS*\n`;
+                    text += `━━━━━━━━━━━━━━━━━━━━\n`;
+                    text += `🙏 _Terimakasih._`;
+
+                    window.open(`https://wa.me/6283194190156?text=${encodeURIComponent(text)}`, '_blank');
                   }}
                   className="col-span-2 py-3.5 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-[8px] shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5"
                 >

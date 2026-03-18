@@ -310,12 +310,24 @@ const App: React.FC = () => {
 
       if (extracted) {
         let finalSizeDetails = extracted.sizeDetails || [];
-        const anyTailorMentioned = finalSizeDetails.some((sd: any) => sd.namaPenjahit);
+        const anyTailorMentioned = finalSizeDetails.some((sd: any) => sd.namaPenjahit && sd.namaPenjahit.trim() !== '');
+
         if (anyTailorMentioned && profileName) {
-          finalSizeDetails = finalSizeDetails.filter((sd: any) =>
-            !sd.namaPenjahit || sd.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim()
+          // Ada nama penjahit di rekapan — ambil hanya yang cocok dengan user login
+          // Size tanpa nama penjahit (kosong) tetap diambil
+          const filtered = finalSizeDetails.filter((sd: any) =>
+            !sd.namaPenjahit || sd.namaPenjahit.trim() === '' ||
+            sd.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim()
           );
+          // Kalau ada yang cocok, pakai yang filtered. Kalau tidak ada sama sekali, ambil semua (fallback)
+          finalSizeDetails = filtered.length > 0 ? filtered : finalSizeDetails;
         }
+
+        // Assign namaPenjahit ke profileName untuk semua size yang lolos filter
+        finalSizeDetails = finalSizeDetails.map((sd: any) => ({
+          ...sd,
+          namaPenjahit: profileName || sd.namaPenjahit || ''
+        }));
 
         const savedCharts = localStorage.getItem('bradwear_size_charts');
         const charts = savedCharts ? JSON.parse(savedCharts) : [];
@@ -471,8 +483,8 @@ const App: React.FC = () => {
     let order = orders.find(o => o.id === id || (o.cloudId && o.cloudId === id));
     if (!order && searchResults) order = searchResults.find(o => o.id === id || (o.cloudId && o.cloudId === id));
     if (!order) return;
-    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
-    if (order.namaPenjahit.toLowerCase().trim() !== profileName.toLowerCase().trim()) {
+    const profileName = localStorage.getItem('profileName') || '';
+    if (profileName && order.namaPenjahit && order.namaPenjahit.toLowerCase().trim() !== profileName.toLowerCase().trim()) {
       if (!skipConfirm) triggerConfirm({ title: 'Akses Ditolak', message: `Hanya ${order.namaPenjahit} yang boleh menghapus.`, type: 'info', onConfirm: () => { } });
       return;
     }
@@ -579,8 +591,10 @@ const App: React.FC = () => {
     syncService.pushOrderToCloud(updatedOrder).catch(e => console.error('Update Sync failed:', e));
   };
 
-  const profileName = localStorage.getItem('profileName') || 'Nama Anda';
-  const myOrders = orders.filter(o => o.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim());
+  const profileName = localStorage.getItem('profileName') || '';
+  const myOrders = profileName
+    ? orders.filter(o => !o.namaPenjahit || o.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim())
+    : orders;
   const activeOrders = myOrders.filter(o => !o.deletedAt);
   const deletedOrders = myOrders.filter(o => !!o.deletedAt);
 

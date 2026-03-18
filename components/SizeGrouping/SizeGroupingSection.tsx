@@ -139,6 +139,7 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
               key={group.id}
               group={group}
               jenisBarang={jenisBarang}
+              currentUser={localStorage.getItem('profileName') || ''}
               onUpdateGroup={(updatedGroup) => handleUpdateGroup(idx, updatedGroup)}
               isDarkMode={isDarkMode}
             />

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Search, Trash2, CheckCircle, Send, FileText, Info, Calendar, User, UserCheck, X, Package, ShieldCheck, Clock, Filter, CalendarDays, ArrowUpDown, ListFilter, CloudUpload, Globe, Edit3, CreditCard, Wallet, AlertCircle, Lock, DollarSign, Sparkles, Layers, RotateCcw, AlertTriangle, ChevronDown } from 'lucide-react';
 import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus, Priority, PaymentStatus } from '../types';
 import { syncService } from '../services/syncService';
@@ -35,6 +35,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
   const [filterMode, setFilterMode] = useState<FilterMode>('SEMUA');
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderItem | null>(null);
   const [selectedEarningOrder, setSelectedEarningOrder] = useState<OrderItem | null>(null);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const itemsRef = React.useRef<Record<string, HTMLDivElement | null>>({});
 
   React.useEffect(() => {
@@ -103,18 +105,21 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
     const completedPaid = completed.filter(o => o.paymentStatus === PaymentStatus.BAYAR);
     const completedUnpaid = completed.filter(o => o.paymentStatus !== PaymentStatus.BAYAR);
 
-    // Grouping completedPaid by DATE (full date) based on completedAt
+    // Helper: get week key "YYYY-Www" from a date (Monday-based)
+    const getWeekKey = (d: Date) => {
+      const monday = startOfWeek(d, { weekStartsOn: 1 });
+      return format(monday, 'yyyy-MM-dd'); // key = monday of that week
+    };
+
+    // Grouping completedPaid by WEEK based on completedAt
     const groupedPaid: Record<string, OrderItem[]> = {};
     completedPaid.forEach(o => {
-      let dateKey = 'Tanpa Tanggal';
+      let weekKey = 'Tanpa Tanggal';
       if (o.completedAt) {
-        try {
-          const d = new Date(o.completedAt);
-          dateKey = format(d, 'yyyy-MM-dd'); // Format: YYYY-MM-DD for sorting
-        } catch (e) { dateKey = 'Tanpa Tanggal'; }
+        try { weekKey = getWeekKey(new Date(o.completedAt)); } catch { }
       }
-      if (!groupedPaid[dateKey]) groupedPaid[dateKey] = [];
-      groupedPaid[dateKey].push(o);
+      if (!groupedPaid[weekKey]) groupedPaid[weekKey] = [];
+      groupedPaid[weekKey].push(o);
     });
 
     // Grouping completedUnpaid by DATE (full date) based on completedAt
@@ -124,8 +129,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
       if (o.completedAt) {
         try {
           const d = new Date(o.completedAt);
-          dateKey = format(d, 'yyyy-MM-dd'); // Format: YYYY-MM-DD for sorting
-        } catch (e) { dateKey = 'Tanpa Tanggal'; }
+          dateKey = format(d, 'yyyy-MM-dd');
+        } catch { dateKey = 'Tanpa Tanggal'; }
       }
       if (!groupedUnpaid[dateKey]) groupedUnpaid[dateKey] = [];
       groupedUnpaid[dateKey].push(o);
@@ -209,48 +214,76 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
       message: `${selected.length} item akan dikirim ke WhatsApp dan otomatis dipindahkan ke History Selesai & Lunas. Lanjutkan?`,
       type: 'warning',
       onConfirm: () => {
-        let totalQty = 0, totalPanjang = 0, totalPendek = 0;
-        let text = "✨ *RINGKASAN KERJA BRADWEAR FLOW* ✨\n━━━━━━━━━━━━━━━━━━━━\n\n";
-        
-        selected.forEach(o => {
-          let curQty = 0, curPanjang = 0, curPendek = 0;
-          
-          text += `✨ *RINCIAN ITEM:* ✨\n────────────────────\n`;
-          
-          o.sizeDetails.forEach(sd => {
-            const type = sd.tangan === 'Panjang' ? 'Lengan Panjang' : 'Lengan Pendek';
-            const icon = sd.tangan === 'Panjang' ? '🌀' : '💠';
-            
-            if (sd.sizes && sd.sizes.length > 0) {
-              sd.sizes.forEach(sz => {
-                text += `${icon} *${sz.size}* | ${type} | *${sz.jumlah} PCS*\n`;
-                curQty += sz.jumlah;
-                if (sd.tangan === 'Panjang') curPanjang += sz.jumlah; else curPendek += sz.jumlah;
-              });
-            } else {
-              text += `${icon} *${sd.size}* | ${type} | *${sd.jumlah} PCS*\n`;
-              curQty += sd.jumlah;
-              if (sd.tangan === 'Panjang') curPanjang += sd.jumlah; else curPendek += sd.jumlah;
-            }
-          });
-          
-          text += `────────────────────\n`;
-          text += `📊 *TOTAL:* *${curQty} PCS* (${curPanjang} Pjg & ${curPendek} Pdk)\n\n`;
-          
-          // Info detail per item
-          text += `💎 *KODE:* ${o.kodeBarang}\n`;
-          text += `👨‍💼 *CONS:* ${o.konsumen || '-'}\n`;
-          text += `👕 *MODEL:* ${o.model}\n`;
-          text += `🎨 *WARNA:* ${o.warna || '-'}\n`;
-          text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-          
-          totalQty += curQty;
-          totalPanjang += curPanjang;
-          totalPendek += curPendek;
-        });
-        
-        text += `📦 *TOTAL BARANG:* ${totalQty} PCS\n`;
+        // Akumulasi total per model+tangan untuk ringkasan akhir
+        const modelTanganTotals: Record<string, number> = {};
+        let grandTotal = 0;
+
+        const tanggal = format(new Date(), 'd MMM yyyy', { locale: idLocale });
+        let text = `*REKAPAN KERJA BRADWEAR*\n`;
+        text += `📅 ${tanggal}\n`;
         text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        selected.forEach((o, idx) => {
+          let panjangQty = 0, pendekQty = 0;
+
+          text += `*${idx + 1}. ${o.kodeBarang}*\n`;
+          text += `👤 Konsumen : ${o.konsumen || '-'}\n`;
+          text += `🧑‍💼 CS       : ${o.cs || '-'}\n`;
+          text += `👕 Model    : ${o.model}${o.warna ? ` (${o.warna})` : ''}\n`;
+          text += `\n`;
+
+          // Kelompokkan size per tangan
+          const panjangSizes: string[] = [];
+          const pendekSizes: string[] = [];
+
+          o.sizeDetails.forEach(sd => {
+            const sizes = (sd.sizes && sd.sizes.length > 0) ? sd.sizes : [{ size: sd.size, jumlah: sd.jumlah }];
+            sizes.forEach(sz => {
+              const entry = `${sz.size}: ${sz.jumlah} pcs`;
+              if (sd.tangan === 'Panjang') {
+                panjangSizes.push(entry);
+                panjangQty += sz.jumlah;
+              } else {
+                pendekSizes.push(entry);
+                pendekQty += sz.jumlah;
+              }
+            });
+          });
+
+          if (panjangSizes.length > 0) {
+            text += `🌀 *Lengan Panjang* (${panjangQty} pcs)\n`;
+            panjangSizes.forEach(s => { text += `   • ${s}\n`; });
+          }
+          if (pendekSizes.length > 0) {
+            text += `💠 *Lengan Pendek* (${pendekQty} pcs)\n`;
+            pendekSizes.forEach(s => { text += `   • ${s}\n`; });
+          }
+
+          const itemTotal = panjangQty + pendekQty;
+          text += `📦 Subtotal : *${itemTotal} pcs*\n`;
+          text += `────────────────────\n\n`;
+
+          // Akumulasi untuk ringkasan
+          const modelKey = o.model.toUpperCase();
+          if (panjangQty > 0) {
+            const k = `${modelKey} - Lengan Panjang`;
+            modelTanganTotals[k] = (modelTanganTotals[k] || 0) + panjangQty;
+          }
+          if (pendekQty > 0) {
+            const k = `${modelKey} - Lengan Pendek`;
+            modelTanganTotals[k] = (modelTanganTotals[k] || 0) + pendekQty;
+          }
+          grandTotal += itemTotal;
+        });
+
+        // Ringkasan total per model+tangan
+        text += `*RINGKASAN TOTAL*\n`;
+        text += `━━━━━━━━━━━━━━━━━━━━\n`;
+        Object.entries(modelTanganTotals).forEach(([key, qty]) => {
+          text += `• ${key}: *${qty} pcs*\n`;
+        });
+        text += `\n📦 *GRAND TOTAL: ${grandTotal} PCS*\n`;
+        text += `━━━━━━━━━━━━━━━━━━━━\n`;
         text += `🙏 _Terimakasih._`;
         
         window.open(`https://wa.me/6283194190156?text=${encodeURIComponent(text)}`, '_blank');
@@ -270,6 +303,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
       }
     });
   };
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2800);
+  };
+
+  const handleStatusComplete = useCallback((orderId: string, kodeBarang: string) => {
+    setCompletingIds(prev => new Set(prev).add(orderId));
+    setTimeout(() => {
+      onUpdateStatus(orderId, JobStatus.BERES);
+      setCompletingIds(prev => { const n = new Set(prev); n.delete(orderId); return n; });
+      showToast(`✅ ${kodeBarang} dipindahkan ke Selesai`);
+    }, 500);
+  }, [onUpdateStatus]);
 
   const formatDateIndo = (dateStr: string | null | undefined) => {
     if (!dateStr) return '-';
@@ -331,107 +378,134 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-slate-900' : 'bg-[#f4f7f9]'}`}>
       {/* Sticky Header */}
-      <div className={`sticky top-0 z-50 pt-4 pb-4 px-6 ${isDarkMode ? 'bg-slate-900' : 'bg-[#f4f7f9]'}`}>
-        <div className="flex justify-between items-center mb-4">
+      <div className={`sticky top-0 z-50 pt-4 pb-3 px-4 ${isDarkMode ? 'bg-slate-900' : 'bg-[#f4f7f9]'}`}>
+        <div className="flex justify-between items-center mb-3">
           <h2 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>History Kerja</h2>
         </div>
-
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input type="text" placeholder="Cari..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={`w-full py-4 pl-11 pr-4 rounded-[1.5rem] border ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-100'}`} />
-          </div>
-          <button onClick={() => setFilterMode('SEMUA')} className="px-4 bg-white border border-slate-100 rounded-2xl"><Filter size={18} /></button>
+        <div className="relative mb-2">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input type="text" placeholder="Cari kode, penjahit, konsumen..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className={`w-full py-3 pl-10 pr-4 rounded-2xl border text-sm ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-100'}`} />
+        </div>
+        {/* Filter chips */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {(['SEMUA', 'TERDEKAT', 'SUDAH DIBAYAR', 'BELUM DIBAYAR'] as FilterMode[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterMode(f)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider transition-all ${
+                filterMode === f
+                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                  : isDarkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-white text-slate-500 border border-slate-200'
+              }`}
+            >
+              {f === 'SEMUA' ? 'Semua' : f === 'TERDEKAT' ? '⏰ Deadline' : f === 'SUDAH DIBAYAR' ? '✅ Lunas' : '⚠️ Belum Lunas'}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Content */}
-      <div className="px-6 pb-32 space-y-6">
+      <div className="px-3 pb-32 space-y-3">
         {activeItems.map(order => {
           const isSelected = selectedIds.has(order.id);
           const isExpanded = expandedDetails.has(order.id);
+          const isCompleting = completingIds.has(order.id);
           return (
-            <div key={order.id} className={`p-4 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] border transition-all ${isSelected ? 'border-emerald-500 ring-4 md:ring-8 ring-emerald-500/5 shadow-xl' : isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'}`}>
-               <div className="flex justify-between items-start mb-3 md:mb-4">
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <button onClick={() => toggleSelect(order.id)} className={`w-6 h-6 md:w-8 md:h-8 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}>
-                      {isSelected && <CheckCircle size={12} className="md:hidden" strokeWidth={4} />}
-                      {isSelected && <CheckCircle size={14} className="hidden md:block" strokeWidth={4} />}
-                    </button>
-                    <span className="text-xs md:text-sm font-black text-emerald-500">{order.kodeBarang}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase">{formatDateIndo(order.tanggalTargetSelesai)}</span>
-                  </div>
-               </div>
-
-               <div className="mb-4 md:mb-6">
-                  <h4 className="text-sm md:text-base font-black uppercase mb-1 truncate">{order.model} • {order.warna}</h4>
-                  <p className="text-[9px] md:text-[10px] font-bold text-slate-400 truncate">PJ: {order.namaPenjahit} | CONS: {order.konsumen || '-'}</p>
-               </div>
-
-               <div className={`rounded-xl md:rounded-[2rem] border overflow-hidden transition-all duration-500 ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                  <button onClick={() => { const next = new Set(expandedDetails); if (next.has(order.id)) next.delete(order.id); else next.add(order.id); setExpandedDetails(next); }} className="w-full p-3 md:p-4 flex justify-between items-center">
-                    <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest opacity-40">Rincian Item ({order.jumlahPesanan} PCS)</span>
-                    <ChevronDown className={`transition-transform duration-500 ${isExpanded ? 'rotate-180' : ''}`} size={16} />
+            <div
+              key={order.id}
+              ref={el => { itemsRef.current[order.id] = el; }}
+              className={`rounded-2xl border transition-all duration-500 overflow-hidden ${
+                isCompleting ? 'opacity-0 scale-95 -translate-y-2 pointer-events-none' : 'opacity-100 scale-100'
+              } ${isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/10 shadow-lg' : isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-100'}`}
+            >
+              {/* Top row: checkbox + kode + tanggal */}
+              <div className="flex items-center justify-between px-3 pt-3 pb-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleSelect(order.id)}
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}
+                  >
+                    {isSelected && <CheckCircle size={10} strokeWidth={4} />}
                   </button>
-                  <div className={`overflow-hidden transition-all duration-500 ${isExpanded ? 'max-h-[1000px] p-3 md:p-4 pt-0 opacity-100' : 'max-h-0 opacity-0'}`}>
-                     <div className="space-y-2">
-                        {order.sizeDetails.map((sd, i) => {
-                          // Jika ada sizes array, tampilkan semua sizes
-                          if (sd.sizes && sd.sizes.length > 0) {
-                            return sd.sizes.map((sizeItem, sIdx) => (
-                              <div key={`${i}-${sIdx}`} className={`p-2 md:p-3 rounded-lg md:rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                                <div className="flex items-center justify-between gap-2 md:gap-3">
-                                   <div className="flex items-center gap-1.5 md:gap-2">
-                                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xs md:text-sm">{sizeItem.size}</div>
-                                      <span className="text-[10px] md:text-xs font-black text-slate-400">-</span>
-                                      <span className="text-xs md:text-sm font-black text-emerald-500">{sizeItem.jumlah} PCS</span>
-                                   </div>
-                                   <div className="flex items-center gap-1 md:gap-2 text-[8px] md:text-[9px] font-bold text-slate-500">
-                                      <span className="uppercase">{sd.gender}</span>
-                                      <span className="text-slate-400">-</span>
-                                      <span>{sd.tangan || '-'}</span>
-                                   </div>
-                                </div>
-                              </div>
-                            ));
-                          } else {
-                            // Format lama: single size
-                            return (
-                              <div key={i} className={`p-2 md:p-3 rounded-lg md:rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
-                                <div className="flex items-center justify-between gap-2 md:gap-3">
-                                   <div className="flex items-center gap-1.5 md:gap-2">
-                                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xs md:text-sm">{sd.size}</div>
-                                      <span className="text-[10px] md:text-xs font-black text-slate-400">-</span>
-                                      <span className="text-xs md:text-sm font-black text-emerald-500">{sd.jumlah} PCS</span>
-                                   </div>
-                                   <div className="flex items-center gap-1 md:gap-2 text-[8px] md:text-[9px] font-bold text-slate-500">
-                                      <span className="uppercase">{sd.gender}</span>
-                                      <span className="text-slate-400">-</span>
-                                      <span>{sd.tangan || '-'}</span>
-                                   </div>
-                                </div>
-                              </div>
-                            );
-                          }
-                        })}
-                     </div>
-                  </div>
-               </div>
+                  <span className="text-xs font-black text-emerald-500">{order.kodeBarang}</span>
+                </div>
+                <span className="text-[8px] font-bold text-slate-400 uppercase">{formatDateIndo(order.tanggalTargetSelesai)}</span>
+              </div>
 
-               <div className="mt-4 md:mt-6 flex justify-between items-center">
-                 <div className="flex gap-1.5 md:gap-2">
-                    <button onClick={() => onUpdateStatus(order.id, JobStatus.BERES)} className="px-2 py-1.5 md:px-4 md:py-2 bg-orange-500 text-white rounded-lg md:rounded-xl font-black text-[7px] md:text-[8px] uppercase">STATUS: {order.status}</button>
-                    <button onClick={() => onUpdatePayment && onUpdatePayment(order.id, PaymentStatus.BAYAR)} className="px-2 py-1.5 md:px-4 md:py-2 bg-blue-600 text-white rounded-lg md:rounded-xl font-black text-[7px] md:text-[8px] uppercase whitespace-nowrap">LUNAS: {order.paymentStatus === PaymentStatus.BAYAR ? 'YA' : 'TIDAK'}</button>
-                 </div>
-                 <div className="flex gap-1.5 md:gap-2 text-slate-400">
-                    <button onClick={() => onEdit(order)}><Edit3 size={14} className="md:hidden" /><Edit3 size={16} className="hidden md:block" /></button>
-                    <button onClick={() => setSelectedOrderDetails(order)}><Info size={14} className="md:hidden" /><Info size={16} className="hidden md:block" /></button>
-                 </div>
-               </div>
+              {/* Model + info baris */}
+              <div className="px-3 pb-2">
+                <h4 className={`text-sm font-black uppercase leading-tight truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{order.model}{order.warna ? ` • ${order.warna}` : ''}</h4>
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  <span className="text-[9px] font-bold text-slate-400">Penjahit:</span>
+                  <span className="text-[9px] font-black text-slate-600">{order.namaPenjahit}</span>
+                  <span className="text-[9px] text-slate-300 mx-0.5">|</span>
+                  <span className="text-[9px] font-bold text-slate-400">Konsumen:</span>
+                  <span className="text-[9px] font-black text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded-full">{order.konsumen || '-'}</span>
+                </div>
+              </div>
+
+              {/* Rincian collapsible */}
+              <div className={`mx-3 mb-2 rounded-xl border overflow-hidden ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                <button
+                  onClick={() => { const next = new Set(expandedDetails); if (next.has(order.id)) next.delete(order.id); else next.add(order.id); setExpandedDetails(next); }}
+                  className="w-full px-3 py-2 flex justify-between items-center"
+                >
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Rincian ({order.jumlahPesanan} PCS)</span>
+                  <ChevronDown className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} size={14} />
+                </button>
+                <div className={`overflow-hidden transition-all duration-400 ${isExpanded ? 'max-h-[600px] px-2 pb-2 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="space-y-1.5">
+                    {order.sizeDetails.map((sd, i) => {
+                      const sizeList = (sd.sizes && sd.sizes.length > 0) ? sd.sizes : [{ size: sd.size, jumlah: sd.jumlah }];
+                      return sizeList.map((sizeItem, sIdx) => (
+                        <div key={`${i}-${sIdx}`} className={`flex items-center justify-between px-2 py-1.5 rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-[10px]">{sizeItem.size}</div>
+                            <span className="text-xs font-black text-emerald-500">{sizeItem.jumlah} PCS</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase">
+                            <span>{sd.gender}</span>
+                            <span className="text-slate-300">·</span>
+                            <span>{sd.tangan || '-'}</span>
+                          </div>
+                        </div>
+                      ));
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action row */}
+              <div className="flex items-center justify-between px-3 pb-3 gap-2">
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => handleStatusComplete(order.id, order.kodeBarang)}
+                    className="px-2.5 py-1.5 bg-orange-500 text-white rounded-lg font-black text-[8px] uppercase tracking-tight"
+                  >
+                    STATUS: {order.status}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!onUpdatePayment) return;
+                      const next = order.paymentStatus === PaymentStatus.BAYAR ? PaymentStatus.BELUM : PaymentStatus.BAYAR;
+                      onUpdatePayment(order.id, next);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg font-black text-[8px] uppercase tracking-tight transition-all ${
+                      order.paymentStatus === PaymentStatus.BAYAR
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    LUNAS: {order.paymentStatus === PaymentStatus.BAYAR ? 'YA' : 'TIDAK'}
+                  </button>
+                </div>
+                <div className="flex gap-2 text-slate-400">
+                  <button onClick={() => onEdit(order)}><Edit3 size={15} /></button>
+                  <button onClick={() => setSelectedOrderDetails(order)}><Info size={15} /></button>
+                </div>
+              </div>
             </div>
-          )
+          );
         })}
 
       {groupedUnpaidItems.length > 0 && (
@@ -522,6 +596,29 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
                      </tbody>
                   </table>
                </div>
+               {/* Totals row for selected items in this week group */}
+               {(() => {
+                 const groupSelected = items.filter(o => selectedIds.has(o.id));
+                 if (groupSelected.length === 0) return null;
+                 const selPcs = groupSelected.reduce((s, o) => s + o.jumlahPesanan, 0);
+                 const selHarga = groupSelected.reduce((s, o) => s + calculateOrderEarning(o), 0);
+                 return (
+                   <div className={`px-3 py-3 border-t flex items-center justify-between gap-2 ${isDarkMode ? 'bg-amber-500/10 border-slate-700' : 'bg-amber-50 border-amber-100'}`}>
+                     <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest">{groupSelected.length} dipilih</span>
+                     <div className="flex items-center gap-3">
+                       <div className="flex flex-col items-end">
+                         <span className="text-[7px] font-black text-slate-400 uppercase">Total PCS</span>
+                         <span className="text-xs font-black text-amber-600">{selPcs} pcs</span>
+                       </div>
+                       <div className="w-px h-6 bg-amber-200" />
+                       <div className="flex flex-col items-end">
+                         <span className="text-[7px] font-black text-slate-400 uppercase">Est. Harga</span>
+                         <span className="text-xs font-black text-emerald-600">Rp {selHarga.toLocaleString('id-ID')}</span>
+                       </div>
+                     </div>
+                   </div>
+                 );
+               })()}
                </div>
             </div>
             );
@@ -538,18 +635,22 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
           </div>
 
           {groupedPaidItems.map(([date, items]) => {
-            // Format tanggal untuk display
+            // Weekly group: date = monday of the week (yyyy-MM-dd)
             let displayDate = 'Tanpa Tanggal';
             if (date !== 'Tanpa Tanggal') {
               try {
-                const d = new Date(date);
-                displayDate = format(d, 'EEEE, d MMMM yyyy', { locale: idLocale }).toUpperCase();
-              } catch (e) {
-                displayDate = date;
-              }
+                const monday = new Date(date);
+                const sunday = new Date(monday);
+                sunday.setDate(monday.getDate() + 6);
+                const fmt = (d: Date) => format(d, 'd MMM', { locale: idLocale });
+                const year = format(monday, 'yyyy');
+                displayDate = `${fmt(monday)} – ${fmt(sunday)} ${year}`.toUpperCase();
+              } catch { displayDate = date; }
             }
             const groupKey = `paid-${date}`;
             const isCollapsed = collapsedGroups.has(groupKey);
+            const weekTotalPcs = items.reduce((s, o) => s + o.jumlahPesanan, 0);
+            const weekTotalHarga = items.reduce((s, o) => s + calculateOrderEarning(o), 0);
             
             return (
             <div key={date} className={`overflow-hidden rounded-[2.5rem] md:rounded-[2.5rem] rounded-[1.5rem] border-2 shadow-xl transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-emerald-500/10'}`}>
@@ -561,11 +662,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
                   <div className="w-10 h-10 md:w-14 md:h-14 bg-emerald-50 text-emerald-500 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0"><CalendarDays size={20} className="md:hidden" /><CalendarDays size={28} className="hidden md:block" /></div>
                   <div className="flex-1 text-left min-w-0">
                      <h4 className="text-xs md:text-base font-black uppercase text-emerald-600 truncate">{displayDate}</h4>
-                     <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase">Laporan Harian Team</p>
+                     <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase">Laporan Mingguan • {items.length} item</p>
                   </div>
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg md:rounded-xl px-2 py-1 md:px-4 md:py-2 flex flex-col items-center shrink-0">
-                     <span className="text-sm md:text-lg font-black text-slate-400">{items.length}</span>
-                     <span className="text-[6px] md:text-[7px] font-black text-slate-300">ITEM</span>
+                  <div className="flex flex-col items-end gap-0.5 shrink-0">
+                     <span className="text-xs font-black text-slate-600">{weekTotalPcs} pcs</span>
+                     <span className="text-[8px] font-black text-emerald-600">Rp {weekTotalHarga.toLocaleString('id-ID')}</span>
                   </div>
                   <ChevronDown className={`transition-transform duration-300 text-slate-400 shrink-0 ${isCollapsed ? '' : 'rotate-180'}`} size={16} />
                </button>
@@ -617,6 +718,29 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
                      </tbody>
                   </table>
                </div>
+               {/* Totals row for selected items in this week group */}
+               {(() => {
+                 const groupSelected = items.filter(o => selectedIds.has(o.id));
+                 if (groupSelected.length === 0) return null;
+                 const selPcs = groupSelected.reduce((s, o) => s + o.jumlahPesanan, 0);
+                 const selHarga = groupSelected.reduce((s, o) => s + calculateOrderEarning(o), 0);
+                 return (
+                   <div className={`px-3 py-3 border-t flex items-center justify-between gap-2 ${isDarkMode ? 'bg-amber-500/10 border-slate-700' : 'bg-amber-50 border-amber-100'}`}>
+                     <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest">{groupSelected.length} dipilih</span>
+                     <div className="flex items-center gap-3">
+                       <div className="flex flex-col items-end">
+                         <span className="text-[7px] font-black text-slate-400 uppercase">PCS</span>
+                         <span className="text-xs font-black text-amber-600">{selPcs} pcs</span>
+                       </div>
+                       <div className="w-px h-6 bg-amber-200" />
+                       <div className="flex flex-col items-end">
+                         <span className="text-[7px] font-black text-slate-400 uppercase">Est. Harga</span>
+                         <span className="text-xs font-black text-emerald-600">Rp {selHarga.toLocaleString('id-ID')}</span>
+                       </div>
+                     </div>
+                   </div>
+                 );
+               })()}
                </div>
             </div>
             );
@@ -628,36 +752,18 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
       {selectedIds.size > 0 && (
         <div className="fixed bottom-24 sm:bottom-20 left-0 right-0 z-[80] px-3 sm:px-4 animate-in slide-in-from-bottom-10 duration-500">
           <div className={`max-w-md mx-auto flex items-center justify-center gap-1.5 sm:gap-2 p-2.5 sm:p-3 rounded-[1.5rem] shadow-2xl border-2 ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-100'}`}>
-            {/* Badge Count */}
             <div className="bg-emerald-500 text-white w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-black text-xs shrink-0">
               {selectedIds.size}
             </div>
-            
-            {/* Restore Button */}
-            <button
-              onClick={handleBulkRestore}
-              className="flex items-center justify-center gap-1 sm:gap-1.5 bg-amber-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0"
-              title="Pulihkan Terpilih"
-            >
+            <button onClick={handleBulkRestore} className="flex items-center justify-center gap-1 sm:gap-1.5 bg-amber-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0" title="Pulihkan Terpilih">
               <RotateCcw size={14} className="shrink-0" />
               <span className="hidden sm:inline">Restore</span>
             </button>
-
-            {/* Delete Button */}
-            <button
-              onClick={handleBulkDelete}
-              className="flex items-center justify-center gap-1 sm:gap-1.5 bg-red-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0"
-              title="Hapus Terpilih"
-            >
+            <button onClick={handleBulkDelete} className="flex items-center justify-center gap-1 sm:gap-1.5 bg-red-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0" title="Hapus Terpilih">
               <Trash2 size={14} className="shrink-0" />
               <span className="hidden sm:inline">Hapus</span>
             </button>
-
-            {/* WhatsApp Button */}
-            <button
-              onClick={handleShareWhatsApp}
-              className="flex items-center justify-center gap-1 sm:gap-1.5 bg-emerald-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0"
-            >
+            <button onClick={handleShareWhatsApp} className="flex items-center justify-center gap-1 sm:gap-1.5 bg-emerald-500 text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl font-black text-[9px] uppercase shadow-lg hover:scale-105 active:scale-95 transition-all min-w-0">
               <Send size={14} className="shrink-0" />
               <span className="hidden sm:inline">WhatsApp</span>
             </button>
@@ -665,91 +771,82 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ orders, onDelete, onBulkD
         </div>
       )}
 
-      {/* Info Detail Popup */}
+      {/* Toast notification */}
+      {toastMsg && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-2xl text-[11px] font-black flex items-center gap-2 whitespace-nowrap">
+            <span>{toastMsg}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Info Detail Popup — compact, full info */}
       {selectedOrderDetails && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
-          <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'}`}>
-            <button onClick={() => setSelectedOrderDetails(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-red-500"><X size={24} /></button>
-
-            <div className="flex flex-col gap-6 overflow-y-auto mt-4 px-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              <style>{`div::-webkit-scrollbar { display: none; }`}</style>
-              
-              <div className="text-center">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className={`relative w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col max-h-[88vh] ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'}`}>
+            <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-slate-300" /></div>
+            <button onClick={() => setSelectedOrderDetails(null)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-500 z-10"><X size={20} /></button>
+            <div className="overflow-y-auto px-5 pb-6 pt-2" style={{ scrollbarWidth: 'none' }}>
+              <div className="text-center mb-4">
                 <h3 className="text-2xl font-black">{selectedOrderDetails.kodeBarang}</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Penjahit: {selectedOrderDetails.namaPenjahit}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Penjahit: {selectedOrderDetails.namaPenjahit}</p>
               </div>
-
-              <div className="space-y-6">
-                <div className="flex flex-col gap-3">
-                  <InfoBox label="Konsumen" value={selectedOrderDetails.konsumen} icon={<UserCheck size={14} className="text-emerald-500" />} isDarkMode={isDarkMode} />
-                  <InfoBox label="Admin (CS)" value={selectedOrderDetails.cs} icon={<ShieldCheck size={14} className="text-orange-500" />} isDarkMode={isDarkMode} />
-                  <InfoBox label="Tgl Order" value={formatDateIndo(selectedOrderDetails.tanggalOrder)} icon={<CalendarDays size={14} className="text-cyan-500" />} isDarkMode={isDarkMode} />
-                  <InfoBox label="Target Selesai" value={formatDateIndo(selectedOrderDetails.tanggalTargetSelesai)} icon={<Calendar size={14} className="text-red-500" />} isDarkMode={isDarkMode} />
-                </div>
-
-                {/* Rincian Items */}
-                <div className="space-y-4">
-                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rincian Item</h5>
-                  {selectedOrderDetails.sizeDetails.map((sd, i) => {
-                    // Jika ada sizes array
-                    if (sd.sizes && sd.sizes.length > 0) {
-                      return (
-                        <div key={i} className={`p-4 rounded-2xl border space-y-2 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                          {sd.sizes.map((sizeItem, sIdx) => (
-                            <div key={sIdx} className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">{sizeItem.size}</div>
-                                <span className="text-xs font-black text-slate-400">-</span>
-                                <span className="text-sm font-black text-emerald-500">{sizeItem.jumlah} PCS</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500">
-                                <span className="uppercase">{sd.gender}</span>
-                                <span className="text-slate-400">-</span>
-                                <span>{sd.tangan || '-'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    } else {
-                      // Format lama
-                      return (
-                        <div key={i} className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">{sd.size}</div>
-                              <span className="text-xs font-black text-slate-400">-</span>
-                              <span className="text-sm font-black text-emerald-500">{sd.jumlah} PCS</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500">
-                              <span className="uppercase">{sd.gender}</span>
-                              <span className="text-slate-400">-</span>
-                              <span>{sd.tangan || '-'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                  })}
-                </div>
-
-                <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                  <div className="flex justify-between items-center mb-3">
-                    <h5 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Rincian Bordir</h5>
-                    <span className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase ${selectedOrderDetails.embroideryStatus === 'Lengkap' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                      {selectedOrderDetails.embroideryStatus || 'Lengkap'}
-                    </span>
+              {/* Info grid 2-col */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  { label: 'Konsumen', value: selectedOrderDetails.konsumen, color: 'text-emerald-500' },
+                  { label: 'CS / Admin', value: selectedOrderDetails.cs, color: 'text-orange-500' },
+                  { label: 'Model', value: selectedOrderDetails.model, color: 'text-blue-500' },
+                  { label: 'Warna', value: selectedOrderDetails.warna, color: 'text-purple-500' },
+                  { label: 'Tgl Order', value: formatDateIndo(selectedOrderDetails.tanggalOrder), color: 'text-cyan-500' },
+                  { label: 'Target Selesai', value: formatDateIndo(selectedOrderDetails.tanggalTargetSelesai), color: 'text-red-500' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className={`p-3 rounded-2xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
+                    <p className={`text-[10px] font-black uppercase truncate ${color}`}>{value || '-'}</p>
                   </div>
-                  {selectedOrderDetails.embroideryNotes && (
-                    <p className="text-[10px] font-bold text-slate-500 italic leading-snug">"{selectedOrderDetails.embroideryNotes}"</p>
-                  )}
-                </div>
-
-                <div className={`p-5 rounded-3xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                  <h5 className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Catatan Kerja</h5>
-                  <p className="text-[10px] font-medium leading-relaxed">{selectedOrderDetails.deskripsiPekerjaan || '-'}</p>
+                ))}
+              </div>
+              {/* Status badges */}
+              <div className="flex gap-2 mb-3">
+                <span className={`flex-1 text-center py-1.5 rounded-xl text-[8px] font-black uppercase ${selectedOrderDetails.status === JobStatus.BERES ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'}`}>{selectedOrderDetails.status}</span>
+                <span className={`flex-1 text-center py-1.5 rounded-xl text-[8px] font-black uppercase ${selectedOrderDetails.paymentStatus === PaymentStatus.BAYAR ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>{selectedOrderDetails.paymentStatus === PaymentStatus.BAYAR ? 'Lunas' : 'Belum Lunas'}</span>
+                <span className={`flex-1 text-center py-1.5 rounded-xl text-[8px] font-black uppercase ${selectedOrderDetails.embroideryStatus === 'Lengkap' ? 'bg-slate-100 text-slate-500' : 'bg-red-100 text-red-500'}`}>Bordir: {selectedOrderDetails.embroideryStatus || 'Lengkap'}</span>
+              </div>
+              {/* Size details */}
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Rincian Size</p>
+              <div className="space-y-1.5 mb-3">
+                {selectedOrderDetails.sizeDetails.map((sd, i) => {
+                  const sizes = (sd.sizes && sd.sizes.length > 0) ? sd.sizes : [{ size: sd.size, jumlah: sd.jumlah }];
+                  return sizes.map((sz, j) => (
+                    <div key={`${i}-${j}`} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${isDarkMode ? 'bg-slate-700 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>{sz.size}</span>
+                        <span className="text-xs font-black text-emerald-500">{sz.jumlah} pcs</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-400 uppercase">
+                        <span>{sd.gender}</span><span>·</span><span>{sd.tangan || '-'}</span>
+                        {sd.namaPerSize && <><span>·</span><span className="text-blue-400">{sd.namaPerSize}</span></>}
+                      </div>
+                    </div>
+                  ));
+                })}
+              </div>
+              {/* Total + harga */}
+              <div className={`flex items-center justify-between px-4 py-3 rounded-2xl border mb-3 ${isDarkMode ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
+                <span className="text-[9px] font-black text-emerald-600/60 uppercase">Total</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-black text-emerald-600">{selectedOrderDetails.jumlahPesanan} pcs</span>
+                  <div className="w-px h-4 bg-emerald-200" />
+                  <span className="text-sm font-black text-emerald-600">Rp {calculateOrderEarning(selectedOrderDetails).toLocaleString('id-ID')}</span>
                 </div>
               </div>
+              {selectedOrderDetails.deskripsiPekerjaan && (
+                <div className={`px-4 py-3 rounded-2xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                  <p className="text-[7px] font-black text-slate-400 uppercase tracking-wider mb-1">Catatan</p>
+                  <p className="text-[10px] font-medium leading-relaxed">{selectedOrderDetails.deskripsiPekerjaan}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

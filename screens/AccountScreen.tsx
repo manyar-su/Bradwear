@@ -380,33 +380,50 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     }
 
     const selectedResults = Array.from(selectedIndicesForShare).map(i => calculatedDistribution[i]);
+    const tanggal = format(new Date(), 'd MMM yyyy', { locale: idLocale });
 
-    let text = `*PEMBAGIAN KERJA BRADWEAR FLOW*\n`;
-    text += `*Tanggal:* ${format(new Date(), 'd MMM yyyy', { locale: idLocale })}\n\n`;
+    let text = `*PEMBAGIAN KERJA BRADWEAR*\n`;
+    text += `📅 ${tanggal}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     selectedResults.forEach(res => {
-      text += `--------------------------\n`;
       text += `👤 *${res.tailorName.toUpperCase()}*\n`;
-      text += `Total: ${res.totalItems} PCS\n`;
-      text += `Detail Kerja:\n`;
+      text += `📦 Total: *${res.totalItems} PCS*\n\n`;
 
       const groupedByCode: Record<string, any[]> = {};
-      res.items.forEach(it => {
+      res.items.forEach((it: any) => {
         if (!groupedByCode[it.kodeBarang]) groupedByCode[it.kodeBarang] = [];
         groupedByCode[it.kodeBarang].push(it);
       });
 
       Object.entries(groupedByCode).forEach(([code, its]) => {
-        text += `📦 *KODE: ${code}*\n`;
-        text += `Model: ${its[0].model}\n`;
-        its.forEach(it => {
-          text += `  - ${it.size}: ${it.count} PCS\n`;
+        const subtotal = its.reduce((s: number, i: any) => s + i.count, 0);
+        text += `  📋 *${code}* — ${its[0].model} (${subtotal} pcs)\n`;
+        its.forEach((it: any) => {
+          text += `     • ${it.size}: ${it.count} pcs\n`;
         });
       });
-      text += `\n`;
+      text += `────────────────────\n\n`;
     });
 
-    text += `_Mohon segera diproses, terima kasih!_`;
+    // Ringkasan total per model
+    const modelTotals: Record<string, number> = {};
+    selectedResults.forEach(res => {
+      res.items.forEach((it: any) => {
+        const k = it.model?.toUpperCase() || 'LAINNYA';
+        modelTotals[k] = (modelTotals[k] || 0) + it.count;
+      });
+    });
+    const grandTotal = selectedResults.reduce((s, r) => s + r.totalItems, 0);
+
+    text += `*RINGKASAN TOTAL*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━\n`;
+    Object.entries(modelTotals).forEach(([model, qty]) => {
+      text += `• ${model}: *${qty} pcs*\n`;
+    });
+    text += `\n📦 *GRAND TOTAL: ${grandTotal} PCS*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `🙏 _Terimakasih._`;
 
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
