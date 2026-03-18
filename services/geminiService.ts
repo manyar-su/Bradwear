@@ -1,8 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const OPENROUTER_KEY = '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';
-const DEFAULT_GEMINI_KEY = 'AIzaSyBqDDY1x9hYJmvb3AFwynxYJ5cGvmmJLTE';
+const OPENROUTER_KEY = (import.meta as any).env.VITE_OPENROUTER_KEY || '';
+const DEFAULT_GEMINI_KEY = (import.meta as any).env.VITE_GOOGLE_API_KEY || '';
 
 const PROMPT_OCR = `Extract exact text data from this order slip image. 
 Act as a high-precision OCR engine with ADVANCED SIZE AND QUANTITY DETECTION.
