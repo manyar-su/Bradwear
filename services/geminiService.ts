@@ -319,11 +319,14 @@ KUALITAS DETEKSI:
 Return ONLY a valid JSON object matching the schema.`;
 
 const callOpenRouter = async (base64Image: string) => {
+  const userApiKey = localStorage.getItem('bradwear_gemini_key');
+  const activeKey = (userApiKey?.startsWith('sk-or-') ? userApiKey : null) || OPENROUTER_KEY;
+  if (!activeKey) throw new Error("OpenRouter key tidak tersedia.");
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "Authorization": `Bearer ${activeKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": window.location.origin,
         "X-Title": "Bradflow App"
@@ -362,12 +365,17 @@ const callOpenRouter = async (base64Image: string) => {
 export const extractOrderData = async (base64Image: string) => {
   const userApiKey = localStorage.getItem('bradwear_gemini_key');
   
-  // Jika ada key sk-or, gunakan OpenRouter
-  if (userApiKey?.startsWith('sk-or-')) {
-    return callOpenRouter(base64Image).then(processResult);
+  // Coba OpenRouter dulu jika ada key
+  if (userApiKey?.startsWith('sk-or-') || OPENROUTER_KEY) {
+    try {
+      return await callOpenRouter(base64Image).then(processResult);
+    } catch (orErr) {
+      console.warn("OpenRouter gagal, fallback ke Google SDK:", orErr);
+      // lanjut ke Google SDK di bawah
+    }
   }
 
-  // Fallback ke Google SDK
+  // Google SDK
   const envApiKey = (import.meta as any).env.VITE_GOOGLE_API_KEY || '';
   const ai = new GoogleGenAI({ apiKey: userApiKey || envApiKey || DEFAULT_GEMINI_KEY });
 
@@ -482,11 +490,6 @@ export const extractOrderData = async (base64Image: string) => {
     if (!text) throw new Error("Gagal membaca foto.");
     return processResult(JSON.parse(text));
   } catch (error) {
-    // If google SDK fails and we have the OR key in storage (even if not started with sk-or in this specific path), try OR as ultimate fallback
-    if (OPENROUTER_KEY) {
-        console.log("SDK Failed, failing over to OpenRouter...");
-        return callOpenRouter(base64Image).then(processResult);
-    }
     throw error;
   }
 };
