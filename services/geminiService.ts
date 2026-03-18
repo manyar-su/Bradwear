@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 const OPENROUTER_KEY = (import.meta as any).env.VITE_OPENROUTER_KEY || '';
-const DEFAULT_GEMINI_KEY = (import.meta as any).env.VITE_GOOGLE_API_KEY || '';
+const DEFAULT_GEMINI_KEY = '';
 
 const PROMPT_OCR = `Extract exact text data from this order slip image. 
 Act as a high-precision OCR engine with ADVANCED SIZE AND QUANTITY DETECTION.
@@ -332,7 +332,7 @@ const callOpenRouter = async (base64Image: string) => {
         "X-Title": "Bradflow App"
       },
       body: JSON.stringify({
-        "model": "google/gemini-2.0-flash-001",
+        "model": "google/gemini-2.5-flash",
         "messages": [
           {
             "role": "user",
@@ -350,7 +350,7 @@ const callOpenRouter = async (base64Image: string) => {
     });
 
     const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     
     const content = data.choices?.[0]?.message?.content;
     if (!content) throw new Error("OpenRouter return empty content");
@@ -363,135 +363,8 @@ const callOpenRouter = async (base64Image: string) => {
 };
 
 export const extractOrderData = async (base64Image: string) => {
-  const userApiKey = localStorage.getItem('bradwear_gemini_key');
-  
-  // Coba OpenRouter dulu jika ada key
-  if (userApiKey?.startsWith('sk-or-') || OPENROUTER_KEY) {
-    try {
-      return await callOpenRouter(base64Image).then(processResult);
-    } catch (orErr) {
-      console.warn("OpenRouter gagal, fallback ke Google SDK:", orErr);
-      // lanjut ke Google SDK di bawah
-    }
-  }
-
-  // Google SDK
-  const envApiKey = (import.meta as any).env.VITE_GOOGLE_API_KEY || '';
-  const ai = new GoogleGenAI({ apiKey: userApiKey || envApiKey || DEFAULT_GEMINI_KEY });
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: {
-        parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-          { text: PROMPT_OCR }
-        ]
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            kodeBarang: { type: Type.STRING },
-            tanggalOrder: { type: Type.STRING },
-            tanggalTargetSelesai: { type: Type.STRING },
-            cs: { type: Type.STRING },
-            konsumen: { type: Type.STRING },
-            jumlahPesanan: { type: Type.NUMBER },
-            jenisBarang: { type: Type.STRING },
-            sizeDetails: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  size: { type: Type.STRING },
-                  jumlah: { type: Type.NUMBER },
-                  gender: { type: Type.STRING },
-                  tangan: { type: Type.STRING },
-                  namaPenjahit: { type: Type.STRING },
-                  namaPerSize: { type: Type.STRING },
-                  warna: { type: Type.STRING },
-                  model: { type: Type.STRING },
-                  sakuType: { type: Type.STRING },
-                  sakuColor: { type: Type.STRING },
-                  modelCelana: { type: Type.STRING },
-                  bahanCelana: { type: Type.STRING },
-                  jenisSakuRompi: { type: Type.STRING },
-                  isCustomSize: { type: Type.BOOLEAN },
-                  customMeasurements: {
-                    type: Type.OBJECT,
-                    properties: {
-                      tinggi: { type: Type.NUMBER },
-                      lebarDada: { type: Type.NUMBER },
-                      lebarBahu: { type: Type.NUMBER },
-                      lenganPanjang: { type: Type.NUMBER },
-                      lenganPendek: { type: Type.NUMBER },
-                      kerah: { type: Type.NUMBER },
-                      manset: { type: Type.NUMBER },
-                      lingPerut: { type: Type.NUMBER },
-                      lingPinggul: { type: Type.NUMBER },
-                      panjangLengan: { type: Type.NUMBER },
-                      lingkaranPerut: { type: Type.NUMBER },
-                      lingkarPinggang: { type: Type.NUMBER },
-                      lingkarPinggul: { type: Type.NUMBER },
-                      lingkarPaha: { type: Type.NUMBER },
-                      lingkarBawah: { type: Type.NUMBER }
-                    }
-                  },
-                  sizes: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        size: { type: Type.STRING },
-                        jumlah: { type: Type.NUMBER },
-                        namaPerSize: { type: Type.STRING },
-                        isCustomSize: { type: Type.BOOLEAN },
-                        customMeasurements: {
-                          type: Type.OBJECT,
-                          properties: {
-                            tinggi: { type: Type.NUMBER },
-                            lebarDada: { type: Type.NUMBER },
-                            lebarBahu: { type: Type.NUMBER },
-                            lenganPanjang: { type: Type.NUMBER },
-                            lenganPendek: { type: Type.NUMBER },
-                            kerah: { type: Type.NUMBER },
-                            manset: { type: Type.NUMBER },
-                            lingPerut: { type: Type.NUMBER },
-                            lingPinggul: { type: Type.NUMBER },
-                            panjangLengan: { type: Type.NUMBER },
-                            lingkaranPerut: { type: Type.NUMBER },
-                            lingkarPinggang: { type: Type.NUMBER },
-                            lingkarPinggul: { type: Type.NUMBER },
-                            lingkarPaha: { type: Type.NUMBER },
-                            lingkarBawah: { type: Type.NUMBER }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            model: { type: Type.STRING },
-            warna: { type: Type.STRING },
-            sakuType: { type: Type.STRING },
-            sakuColor: { type: Type.STRING },
-            bahanKemeja: { type: Type.STRING },
-            deskripsiPekerjaan: { type: Type.STRING },
-            isCustomFormat: { type: Type.BOOLEAN }
-          }
-        }
-      }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("Gagal membaca foto.");
-    return processResult(JSON.parse(text));
-  } catch (error) {
-    throw error;
-  }
+  // Selalu pakai OpenRouter
+  return callOpenRouter(base64Image).then(processResult);
 };
 
 const processResult = (result: any) => {
