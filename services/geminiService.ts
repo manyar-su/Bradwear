@@ -320,19 +320,17 @@ Return ONLY a valid JSON object matching the schema.`;
 
 const callOpenRouter = async (base64Image: string) => {
   const userApiKey = localStorage.getItem('bradwear_gemini_key');
-  const activeKey = (userApiKey?.startsWith('sk-or-') ? userApiKey : null) || OPENROUTER_KEY;
-  if (!activeKey) throw new Error("OpenRouter key tidak tersedia.");
+  const activeKey = (userApiKey?.startsWith('sk-') ? userApiKey : null) || OPENROUTER_KEY;
+  if (!activeKey) throw new Error("API key tidak tersedia.");
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://ai.sumopod.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${activeKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Bradflow App"
       },
       body: JSON.stringify({
-        "model": "google/gemini-2.5-flash",
+        "model": "gemini/gemini-2.0-flash",
         "messages": [
           {
             "role": "user",
