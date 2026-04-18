@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const globalCameraInputRef = useRef<HTMLInputElement>(null);
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
+  const lastSaveRef = useRef<string>('');
 
   const [globalNotification, setGlobalNotification] = useState<{ sender: string, kode: string, type?: 'ADD' | 'DELETE' } | null>(null);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
@@ -112,7 +113,14 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setOrders(parsed.map(o => ({
+          // Deduplicate: hapus item dengan id sama, simpan yang pertama
+          const seen = new Set<string>();
+          const deduped = parsed.filter(o => {
+            if (seen.has(o.id)) return false;
+            seen.add(o.id);
+            return true;
+          });
+          setOrders(deduped.map(o => ({
             ...o,
             status: o.status || JobStatus.PROSES,
             createdAt: o.createdAt || new Date().toISOString()
@@ -423,31 +431,33 @@ const App: React.FC = () => {
   const handleManualEntryFromPopup = () => { setShowScanMethodPopup(false); setScanResult(null); setActiveView('SCAN'); };
 
   const handleAddOrder = (newOrder: OrderItem) => {
+    // Guard: block exact double-save dalam 2 detik (klik ganda)
+    const saveKey = `${newOrder.kodeBarang}-${newOrder.namaPenjahit}-${newOrder.jumlahPesanan}`;
+    const now = Date.now();
+    if (lastSaveRef.current === saveKey + now.toString().slice(0, -3)) {
+      console.warn('Double save blocked:', saveKey);
+      return;
+    }
+    lastSaveRef.current = saveKey + now.toString().slice(0, -3);
+
     const existingIndexById = orders.findIndex(o => o.id === newOrder.id);
-    const existingIndexByCode = newOrder.kodeBarang ? orders.findIndex(o => 
-      o.kodeBarang === newOrder.kodeBarang && 
-      o.namaPenjahit === newOrder.namaPenjahit &&
-      o.id !== newOrder.id
-    ) : -1;
 
     if (existingIndexById > -1) {
-      const updatedOrders = orders.map(o => o.id === newOrder.id ? newOrder : o);
-      setOrders(updatedOrders);
+      // Edit existing order (same id) → update
+      setOrders(prev => prev.map(o => o.id === newOrder.id ? newOrder : o));
       syncService.pushOrderToCloud(newOrder).catch(e => console.error('Update Sync failed:', e));
-    } else if (existingIndexByCode > -1) {
-      const existingOrder = orders[existingIndexByCode];
-      const mergedOrder = { ...newOrder, id: existingOrder.id, cloudId: existingOrder.cloudId, createdAt: existingOrder.createdAt };
-      const newOrders = [...orders];
-      newOrders[existingIndexByCode] = mergedOrder;
-      setOrders(newOrders);
-      syncService.pushOrderToCloud(mergedOrder).catch(e => console.error('Duplicate Merge Sync failed:', e));
     } else {
+      // Order baru → selalu tambah, biarkan user yang hapus jika duplikat
       const finalizedOrder: OrderItem = {
         ...newOrder,
         id: newOrder.id || Math.random().toString(36).substr(2, 9),
         createdAt: newOrder.createdAt || new Date().toISOString()
       };
-      setOrders([finalizedOrder, ...orders]);
+      setOrders(prev => {
+        // Hanya block jika id persis sama (double-click submit)
+        if (prev.some(o => o.id === finalizedOrder.id)) return prev;
+        return [finalizedOrder, ...prev];
+      });
       if (finalizedOrder.createCalendarReminder && finalizedOrder.tanggalTargetSelesai) createCalendarReminder(finalizedOrder);
       syncService.pushOrderToCloud(finalizedOrder).catch(e => console.error('Initial Sync failed:', e));
     }
