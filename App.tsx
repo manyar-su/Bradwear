@@ -207,9 +207,27 @@ const App: React.FC = () => {
         if (event === 'DELETE') {
           return prev.filter(o => o.id !== order.id && o.cloudId !== order.id);
         }
-        const exists = prev.some(o => o.id === order.id || (o.cloudId && o.cloudId === order.cloudId));
+        // Cek duplikat: by id, cloudId, atau kodeBarang+namaPenjahit+waktu berdekatan
+        const exists = prev.some(o => 
+          o.id === order.id || 
+          o.id === order.cloudId ||
+          (o.cloudId && (o.cloudId === order.cloudId || o.cloudId === order.id)) ||
+          (o.kodeBarang === order.kodeBarang && 
+           o.namaPenjahit === order.namaPenjahit &&
+           Math.abs(new Date(o.createdAt || 0).getTime() - new Date(order.createdAt || 0).getTime()) < 30000)
+        );
         if (exists) {
-          return prev.map(o => (o.id === order.id || (o.cloudId && o.cloudId === order.cloudId)) ? order : o);
+          // Update cloudId jika belum ada
+          return prev.map(o => {
+            if (o.id === order.id || o.id === order.cloudId || (o.cloudId && (o.cloudId === order.cloudId || o.cloudId === order.id))) {
+              return { ...o, cloudId: order.cloudId || order.id };
+            }
+            if (o.kodeBarang === order.kodeBarang && o.namaPenjahit === order.namaPenjahit &&
+                Math.abs(new Date(o.createdAt || 0).getTime() - new Date(order.createdAt || 0).getTime()) < 30000) {
+              return { ...o, cloudId: o.cloudId || order.cloudId || order.id };
+            }
+            return o;
+          });
         }
         return [order, ...prev];
       });
