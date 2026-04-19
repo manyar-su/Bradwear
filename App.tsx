@@ -168,12 +168,12 @@ const App: React.FC = () => {
       if (storedOrders) {
         const localOrders: OrderItem[] = JSON.parse(storedOrders);
         const unSyncedOrders = localOrders.filter(o => !o.cloudId && !o.deletedAt);
-        
         if (unSyncedOrders.length > 0) {
           for (const order of unSyncedOrders) {
+            // Background upload — hanya update cloudId, tidak inject order baru ke state
             const synced = await syncService.pushOrderToCloud(order);
             if (synced && synced.cloudId) {
-              setOrders(prev => prev.map(o => o.id === order.id ? synced : o));
+              setOrders(prev => prev.map(o => o.id === order.id ? { ...o, cloudId: synced.cloudId } : o));
             }
           }
         }
@@ -186,7 +186,6 @@ const App: React.FC = () => {
 
     const currentVersion = '1.0.3';
     const lastSyncVersion = localStorage.getItem('bradwear_last_sync_version');
-
     if (lastSyncVersion !== currentVersion) {
       let ordersToSync = [];
       try {
@@ -194,7 +193,6 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Failed to parse orders for sync:", e);
       }
-
       if (ordersToSync.length > 0) {
         syncService.syncAllLocalToCloud(ordersToSync).then(() => {
           localStorage.setItem('bradwear_last_sync_version', currentVersion);
@@ -202,63 +200,79 @@ const App: React.FC = () => {
       }
     }
 
+    // Supabase realtime: HANYA update cloudId jika order sudah ada di local
+    // TIDAK inject order baru dari cloud ke state (mencegah duplikat)
     const orderSubscription = syncService.subscribeToGlobalOrders((order, event) => {
       setOrders(prev => {
         if (event === 'DELETE') {
           return prev.filter(o => o.id !== order.id && o.cloudId !== order.id);
         }
-        // Cek duplikat: by id, cloudId, atau kodeBarang+namaPenjahit+waktu berdekatan
-        const exists = prev.some(o => 
-          o.id === order.id || 
+        // Hanya update cloudId untuk order yang sudah ada — jangan tambah baru
+        const localOrder = prev.find(o =>
+          o.id === order.id ||
           o.id === order.cloudId ||
           (o.cloudId && (o.cloudId === order.cloudId || o.cloudId === order.id)) ||
-          (o.kodeBarang === order.kodeBarang && 
+          (o.kodeBarang === order.kodeBarang &&
            o.namaPenjahit === order.namaPenjahit &&
-           Math.abs(new Date(o.createdAt || 0).getTime() - new Date(order.createdAt || 0).getTime()) < 30000)
+           Math.abs(new Date(o.createdAt || 0).getTime() - new Date(order.createdAt || 0).getTime()) < 60000)
         );
-        if (exists) {
-          // Update cloudId jika belum ada
-          return prev.map(o => {
-            if (o.id === order.id || o.id === order.cloudId || (o.cloudId && (o.cloudId === order.cloudId || o.cloudId === order.id))) {
-              return { ...o, cloudId: order.cloudId || order.id };
-            }
-            if (o.kodeBarang === order.kodeBarang && o.namaPenjahit === order.namaPenjahit &&
-                Math.abs(new Date(o.createdAt || 0).getTime() - new Date(order.createdAt || 0).getTime()) < 30000) {
-              return { ...o, cloudId: o.cloudId || order.cloudId || order.id };
-            }
-            return o;
-          });
+        if (localOrder) {
+          return prev.map(o => o.id === localOrder.id
+            ? { ...o, cloudId: o.cloudId || order.cloudId || order.id }
+            : o
+          );
         }
-        return [order, ...prev];
+        // Order dari user lain — tidak ditambahkan ke history lokal
+        return prev;
       });
     });
 
+    // ONE-TIME initial load dari Supabase untuk restore data yang belum ada di localStorage
+    // Setelah ini, history murni dari localStorage — tidak ada inject realtime
+    const initialSyncKey = 'bradwear_initial_sync_done';
     syncService.getGlobalOrders().then(globalOrders => {
       setOrders(prev => {
         const combined = [...prev];
+        let changed = false;
         globalOrders.forEach(go => {
-          const idx = combined.findIndex(o => o.id === go.id || (o.cloudId && o.cloudId === go.cloudId));
-          if (idx === -1) {
+          const exists = combined.some(o =>
+            o.id === go.id ||
+            o.id === go.cloudId ||
+            (o.cloudId && (o.cloudId === go.cloudId || o.cloudId === go.id))
+          );
+          if (!exists) {
             combined.push(go);
+            changed = true;
           } else {
-            combined[idx] = go;
+            // Update cloudId saja
+            const idx = combined.findIndex(o =>
+              o.id === go.id || o.id === go.cloudId ||
+              (o.cloudId && (o.cloudId === go.cloudId || o.cloudId === go.id))
+            );
+            if (idx > -1 && !combined[idx].cloudId) {
+              combined[idx] = { ...combined[idx], cloudId: go.cloudId || go.id };
+              changed = true;
+            }
           }
         });
+        if (!changed) return prev;
         return combined.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       });
     });
 
     const profileName = localStorage.getItem('profileName');
     if (profileName && profileName !== 'Nama Anda') {
+      // Deleted orders dari cloud juga tidak di-inject ke state
+      // Hanya sync status deletedAt untuk order yang sudah ada di lokal
       syncService.getDeletedOrders(profileName).then(deletedCloudOrders => {
         setOrders(prev => {
-          const combined = [...prev];
-          deletedCloudOrders.forEach(do_ => {
-            const idx = combined.findIndex(o => o.id === do_.id || (o.cloudId && o.cloudId === do_.cloudId));
-            if (idx === -1) combined.push(do_);
-            else combined[idx] = do_;
+          return prev.map(o => {
+            const cloudVersion = deletedCloudOrders.find(d => d.id === o.id || (o.cloudId && d.cloudId === o.cloudId));
+            if (cloudVersion && cloudVersion.deletedAt && !o.deletedAt) {
+              return { ...o, deletedAt: cloudVersion.deletedAt };
+            }
+            return o;
           });
-          return combined;
         });
       });
     }
@@ -543,8 +557,15 @@ const App: React.FC = () => {
 
   const handlePermanentDelete = (id: string) => {
     syncService.deleteOrderPermanently(id).catch(e => console.error('Permanent Delete Sync failed:', e));
-    setOrders(orders.filter(o => o.id !== id && o.cloudId !== id));
+    setOrders(prev => prev.filter(o => o.id !== id && o.cloudId !== id));
     addNotification('Data Terhapus', 'Dihapus permanen', 'danger');
+  };
+
+  const handleBulkPermanentDelete = (ids: string[]) => {
+    const idSet = new Set(ids);
+    ids.forEach(id => syncService.deleteOrderPermanently(id).catch(e => console.error('Bulk Permanent Delete failed:', e)));
+    setOrders(prev => prev.filter(o => !idSet.has(o.id) && !(o.cloudId && idSet.has(o.cloudId))));
+    addNotification('Data Terhapus', `${ids.length} data dihapus permanen`, 'danger');
   };
 
   const handleUpdateStatus = (id: string, newStatus: JobStatus) => {
@@ -711,7 +732,7 @@ const App: React.FC = () => {
             {activeView === 'SCAN' && <ScanScreen onSave={handleAddOrder} onCancel={() => setActiveView('DASHBOARD')} isDarkMode={isDarkMode} existingOrders={activeOrders} isScanningGlobal={isScanning} scanResultGlobal={scanResult} onStartScan={handleGlobalScan} setScanResultGlobal={setScanResult} triggerConfirm={triggerConfirm} />}
             {activeView === 'HISTORY' && <HistoryScreen orders={activeOrders} onDelete={(id) => handleDeleteOrder(id, undefined, false)} onBulkDelete={handleBulkDelete} onUpdateStatus={handleUpdateStatus} onBulkUpdateStatus={handleBulkUpdateStatus} onUpdatePayment={handleUpdatePayment} onEdit={handleEditFromHistory} searchQuery={searchQuery} setSearchQuery={setSearchQuery} isDarkMode={isDarkMode} targetId={targetOrderId} clearTargetId={() => setTargetOrderId(null)} triggerConfirm={triggerConfirm} />}
             {activeView === 'ANALYTICS' && <AnalyticsScreen orders={myOrders} isDarkMode={isDarkMode} />}
-            {activeView === 'ACCOUNT' && <AccountScreen orders={activeOrders} deletedOrders={deletedOrders} onRestore={handleRestoreOrder} onPermanentDelete={handlePermanentDelete} onUpdateOrder={handleUpdateOrder} isDarkMode={isDarkMode} onViewChange={setActiveView} triggerConfirm={triggerConfirm} />}
+            {activeView === 'ACCOUNT' && <AccountScreen orders={activeOrders} deletedOrders={deletedOrders} onRestore={handleRestoreOrder} onPermanentDelete={handlePermanentDelete} onBulkPermanentDelete={handleBulkPermanentDelete} onUpdateOrder={handleUpdateOrder} isDarkMode={isDarkMode} onViewChange={setActiveView} triggerConfirm={triggerConfirm} />}
             {activeView === 'FORUM_CHAT' && <ChatScreen isDarkMode={isDarkMode} />}
           </div>
         </Suspense>

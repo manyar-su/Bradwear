@@ -54,12 +54,13 @@ const MenuItem = ({ icon, label, isDarkMode, onClick, badge }: any) => (
   </button>
 );
 
-const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore, onPermanentDelete, onUpdateOrder, onViewChange, triggerConfirm }: { isDarkMode: boolean, orders?: OrderItem[], deletedOrders: OrderItem[], onRestore: (id: string) => void, onPermanentDelete: (id: string) => void, onUpdateOrder: (order: OrderItem) => void, onViewChange: (view: any) => void, triggerConfirm: (config: any) => void }) => {
+const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore, onPermanentDelete, onBulkPermanentDelete, onUpdateOrder, onViewChange, triggerConfirm }: { isDarkMode: boolean, orders?: OrderItem[], deletedOrders: OrderItem[], onRestore: (id: string) => void, onPermanentDelete: (id: string) => void, onBulkPermanentDelete?: (ids: string[]) => void, onUpdateOrder: (order: OrderItem) => void, onViewChange: (view: any) => void, triggerConfirm: (config: any) => void }) => {
   const [showSplitPopup, setShowSplitPopup] = useState(false);
   const [showPricePopup, setShowPricePopup] = useState(false);
   const [showReportPopup, setShowReportPopup] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [showRecyclePopup, setShowRecyclePopup] = useState(false);
+  const [trashSelectedIds, setTrashSelectedIds] = useState<Set<string>>(new Set());
   const [showEmbroideryPopup, setShowEmbroideryPopup] = useState(false);
   const [showApiKeyPopup, setShowApiKeyPopup] = useState(false);
   const [showSizeChartPopup, setShowSizeChartPopup] = useState(false);
@@ -842,49 +843,115 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       {showRecyclePopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className={`relative w-full max-w-sm rounded-[3rem] p-8 shadow-2xl flex flex-col max-h-[85vh] ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-800'}`}>
-            <div className="flex justify-between items-center mb-6">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-black">Tempat Sampah</h3>
-              <button onClick={() => setShowRecyclePopup(false)} className="text-slate-400 hover:text-red-500"><X size={24} /></button>
+              <button onClick={() => { setShowRecyclePopup(false); setTrashSelectedIds(new Set()); }} className="text-slate-400 hover:text-red-500"><X size={24} /></button>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 no-scrollbar space-y-4">
+            {/* Select all + bulk actions */}
+            {deletedOrders.length > 0 && (
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
+                <button
+                  onClick={() => {
+                    if (trashSelectedIds.size === deletedOrders.length) {
+                      setTrashSelectedIds(new Set());
+                    } else {
+                      setTrashSelectedIds(new Set(deletedOrders.map(o => o.id)));
+                    }
+                  }}
+                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${trashSelectedIds.size === deletedOrders.length && deletedOrders.length > 0 ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}
+                >
+                  {trashSelectedIds.size === deletedOrders.length && deletedOrders.length > 0 && <CheckCircle2 size={10} strokeWidth={4} />}
+                </button>
+                <span className="text-[9px] font-black text-slate-400 uppercase flex-1">
+                  {trashSelectedIds.size > 0 ? `${trashSelectedIds.size} dipilih` : 'Pilih Semua'}
+                </span>
+                {trashSelectedIds.size > 0 && (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => {
+                        const ids = Array.from(trashSelectedIds);
+                        ids.forEach(id => onRestore(id));
+                        setTrashSelectedIds(new Set());
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-500 text-white rounded-xl font-black text-[8px] uppercase flex items-center gap-1"
+                    >
+                      <RotateCcw size={11} /> Pulihkan
+                    </button>
+                    <button
+                      onClick={() => {
+                        triggerConfirm({
+                          title: 'HAPUS PERMANEN?',
+                          message: `Hapus ${trashSelectedIds.size} data selamanya? Tidak bisa dikembalikan.`,
+                          type: 'danger',
+                          onConfirm: () => {
+                            const ids = Array.from(trashSelectedIds);
+                            if (onBulkPermanentDelete) {
+                              onBulkPermanentDelete(ids);
+                            } else {
+                              ids.forEach(id => onPermanentDelete(id));
+                            }
+                            setTrashSelectedIds(new Set());
+                          }
+                        });
+                      }}
+                      className="px-2.5 py-1.5 bg-red-500 text-white rounded-xl font-black text-[8px] uppercase flex items-center gap-1"
+                    >
+                      <Trash2 size={11} /> Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto pr-2 no-scrollbar space-y-3">
               {deletedOrders.length === 0 ? (
                 <div className="py-20 flex flex-col items-center gap-4 opacity-30 text-center">
                   <Trash2 size={48} />
                   <p className="text-[10px] font-black uppercase">Tidak ada data terhapus</p>
                 </div>
-              ) : deletedOrders.map(o => (
-                <div key={o.id} className={`p-4 rounded-3xl border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#f8fafc] border-slate-100'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1 min-w-0 pr-4">
-                      <p className="text-[9px] font-black text-emerald-500 uppercase truncate">{o.kodeBarang}</p>
-                      <p className="text-xs font-bold truncate">{o.model}</p>
-                      <p className="text-[8px] font-bold text-slate-400 italic">Dihapus pada: {o.deletedAt ? format(new Date(o.deletedAt), 'd MMM HH:mm') : '-'}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => onRestore(o.id)}
-                        className="p-2 bg-emerald-100 text-emerald-600 rounded-xl active:scale-90 shadow-sm"
-                      >
-                        <RotateCcw size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          triggerConfirm({
+              ) : deletedOrders.map(o => {
+                const isSelected = trashSelectedIds.has(o.id);
+                return (
+                  <div
+                    key={o.id}
+                    onClick={() => {
+                      const next = new Set(trashSelectedIds);
+                      if (next.has(o.id)) next.delete(o.id); else next.add(o.id);
+                      setTrashSelectedIds(next);
+                    }}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50/50' : isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#f8fafc] border-slate-100'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}>
+                        {isSelected && <CheckCircle2 size={9} strokeWidth={4} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-black text-emerald-500 uppercase truncate">{o.kodeBarang}</p>
+                        <p className="text-xs font-bold truncate">{o.model}</p>
+                        <p className="text-[8px] font-bold text-slate-400 italic">Dihapus: {o.deletedAt ? format(new Date(o.deletedAt), 'd MMM HH:mm') : '-'}</p>
+                      </div>
+                      <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => onRestore(o.id)} className="p-1.5 bg-emerald-100 text-emerald-600 rounded-xl active:scale-90">
+                          <RotateCcw size={14} />
+                        </button>
+                        <button
+                          onClick={() => triggerConfirm({
                             title: 'HAPUS PERMANEN?',
-                            message: `Hapus data [${o.kodeBarang}] selamanya?`,
+                            message: `Hapus [${o.kodeBarang}] selamanya?`,
                             type: 'danger',
                             onConfirm: () => onPermanentDelete(o.id)
-                          });
-                        }}
-                        className="p-2 bg-red-100 text-red-600 rounded-xl active:scale-90 shadow-sm"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                          })}
+                          className="p-1.5 bg-red-100 text-red-600 rounded-xl active:scale-90"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
