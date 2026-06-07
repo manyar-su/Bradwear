@@ -105,15 +105,6 @@ const orderBelongsToTailor = (order: OrderItem, profileName: string) => {
   return (order.sizeDetails || []).some(detail => matchesTailorName(detail.namaPenjahit, profileName));
 };
 
-const derivePrimaryTailorName = (sizeDetails: any[] = [], fallbackName: string) => {
-  const detected = Array.from(new Set(
-    sizeDetails
-      .map(detail => normalizeTailorName(detail?.namaPenjahit))
-      .filter(Boolean)
-  ));
-  return detected.length === 1 ? detected[0]! : fallbackName;
-};
-
 const getActiveProfileName = () => {
   const raw = (localStorage.getItem('profileName') || '').trim();
   const normalized = normalizeTailorName(raw) || raw || 'Nama Anda';
@@ -277,9 +268,10 @@ const App: React.FC = () => {
     syncService.flushOutbox()
       .then(async () => {
         const activeTailorName = getActiveProfileName().trim();
+        const cloudOrders = await syncService.getGlobalOrders();
         return activeTailorName && activeTailorName !== 'Nama Anda'
-          ? syncService.getOrdersByTailor(activeTailorName)
-          : syncService.getGlobalOrders();
+          ? cloudOrders.filter(order => orderBelongsToTailor(order, activeTailorName))
+          : cloudOrders;
       })
       .then(cloudOrders => {
         setOrders(prev => {
@@ -368,13 +360,9 @@ const App: React.FC = () => {
         : currentLocal.length > 0;
       if (hasLocalForProfile) return;
 
-      const cloudOrders = hasValidProfile
-        ? await syncService.getOrdersByTailor(profileName)
-        : await syncService.getGlobalOrders();
+      const cloudOrders = await syncService.getGlobalOrders();
       const mineFromCloud = hasValidProfile
-        ? cloudOrders.filter(
-            o => orderBelongsToTailor(o, profileName)
-          )
+        ? cloudOrders.filter(o => orderBelongsToTailor(o, profileName))
         : cloudOrders;
       if (mineFromCloud.length === 0) return;
 
@@ -564,7 +552,7 @@ const App: React.FC = () => {
           ...extracted,
           sizeDetails: finalSizeDetails,
           jumlahPesanan: finalSizeDetails.reduce((sum, sd) => sum + (sd.jumlah || 0), 0),
-          namaPenjahit: derivePrimaryTailorName(finalSizeDetails, profileName),
+          namaPenjahit: profileName || extracted.namaPenjahit || 'Nama Anda',
           source: 'scan',
           scanPayload: extracted,
           id: Math.random().toString(36).substr(2, 9),

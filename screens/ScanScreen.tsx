@@ -54,14 +54,10 @@ const INITIAL_FORM_STATE: Partial<OrderItem> = {
   jenisBarang: undefined
 };
 
-const derivePrimaryTailorName = (sizeDetails: any[] = [], fallbackName: string) => {
-  const detected = Array.from(new Set(
-    sizeDetails
-      .map(detail => typeof detail?.namaPenjahit === 'string' ? detail.namaPenjahit.trim() : '')
-      .filter(Boolean)
-  ));
-  return detected.length === 1 ? detected[0] : fallbackName;
-};
+const getActiveProfileName = () =>
+  normalizeTailorName(localStorage.getItem('profileName')) ||
+  localStorage.getItem('profileName') ||
+  'Nama Anda';
 
 const ScanScreen: React.FC<ScanScreenProps> = ({
   onSave, onCancel, isDarkMode, existingOrders = [],
@@ -132,7 +128,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   };
 
   useEffect(() => {
-    const profileName = normalizeTailorName(localStorage.getItem('profileName')) || localStorage.getItem('profileName') || 'Nama Anda';
+    const profileName = getActiveProfileName();
     setFormData(prev => ({ ...prev, namaPenjahit: profileName }));
     
     // Load size charts
@@ -206,7 +202,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
       setFormData(prev => ({
         ...prev,
         ...scanResultGlobal,
-        namaPenjahit: derivePrimaryTailorName(scanResultGlobal.sizeDetails || [], scanResultGlobal.namaPenjahit || prev.namaPenjahit || ''),
+        namaPenjahit: getActiveProfileName(),
         isManual: false,
         jenisBarang: detectedJenis || prev.jenisBarang,
         bahanKemeja: detectedBahan || scanResultGlobal.bahanKemeja || prev.bahanKemeja,
@@ -331,7 +327,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
       onConfirm: () => {
         setScanResultGlobal(null);
         setIsManualMode(false);
-        setFormData(INITIAL_FORM_STATE);
+        setFormData({ ...INITIAL_FORM_STATE, namaPenjahit: getActiveProfileName() });
       }
     });
   };
@@ -383,7 +379,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
     setFormData(prev => ({
       ...prev, 
       isManual: true,
-      namaPenjahit: 'Nama Anda',
+      namaPenjahit: getActiveProfileName(),
       jenisBarang: undefined,
       sizeDetails: [{
         size: '', 
@@ -815,7 +811,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                         type="button"
                         onClick={() => {
                           setScanResultGlobal(null);
-                          setFormData(INITIAL_FORM_STATE);
+                          setFormData({ ...INITIAL_FORM_STATE, namaPenjahit: getActiveProfileName() });
                           setIsManualMode(false);
                         }}
                         className="p-3 bg-white/20 rounded-2xl hover:bg-white/30 transition-all active:scale-95"
