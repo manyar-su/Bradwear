@@ -7,7 +7,7 @@ import { id as idLocale } from 'date-fns/locale/id';
 import { extractOrderData } from './services/geminiService';
 import { syncService } from './services/syncService';
 import { notificationService } from './services/notificationService';
-import { normalizeTailorName } from './utils/tailors';
+import { matchTailorIdentity, normalizeTailorName } from './utils/tailors';
 import { X, Camera, AlertTriangle, AlertCircle, Info, LogOut, ChevronRight, Loader2, Sparkles, FileText, Upload, Keyboard } from 'lucide-react';
 
 // Lazy loading screens for performance
@@ -96,6 +96,33 @@ const flattenExtractedSizeDetails = (sizeDetails: any[] = []) => {
   return flattened;
 };
 
+const matchesTailorName = (value: string | undefined, profileName: string) =>
+  !!value && matchTailorIdentity(value, profileName);
+
+const orderBelongsToTailor = (order: OrderItem, profileName: string) => {
+  if (!profileName) return true;
+  if (matchesTailorName(order.namaPenjahit, profileName)) return true;
+  return (order.sizeDetails || []).some(detail => matchesTailorName(detail.namaPenjahit, profileName));
+};
+
+const derivePrimaryTailorName = (sizeDetails: any[] = [], fallbackName: string) => {
+  const detected = Array.from(new Set(
+    sizeDetails
+      .map(detail => normalizeTailorName(detail?.namaPenjahit))
+      .filter(Boolean)
+  ));
+  return detected.length === 1 ? detected[0]! : fallbackName;
+};
+
+const getActiveProfileName = () => {
+  const raw = (localStorage.getItem('profileName') || '').trim();
+  const normalized = normalizeTailorName(raw) || raw || 'Nama Anda';
+  if (raw && normalized !== raw) {
+    localStorage.setItem('profileName', normalized);
+  }
+  return normalized;
+};
+
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('DASHBOARD');
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -152,7 +179,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const showGlobalNotification = (notif: { sender: string; kode: string; type?: 'ADD' | 'DELETE' }) => {
-      const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+      const profileName = getActiveProfileName();
       if (notif.sender !== profileName) {
         setGlobalNotification(notif);
         setTimeout(() => setGlobalNotification(null), 5000);
@@ -248,10 +275,16 @@ const App: React.FC = () => {
     
     syncLocalData();
     syncService.flushOutbox()
-      .then(() => syncService.getGlobalOrders())
+      .then(async () => {
+        const activeTailorName = getActiveProfileName().trim();
+        return activeTailorName && activeTailorName !== 'Nama Anda'
+          ? syncService.getOrdersByTailor(activeTailorName)
+          : syncService.getGlobalOrders();
+      })
       .then(cloudOrders => {
         setOrders(prev => {
-          const pendingLocal = prev.filter(order => !order.cloudId);
+          const profileName = getActiveProfileName().trim();
+          const pendingLocal = prev.filter(order => !order.cloudId && orderBelongsToTailor(order, profileName));
           return [...pendingLocal, ...cloudOrders];
         });
       })
@@ -297,7 +330,10 @@ const App: React.FC = () => {
             : o
           );
         }
-        // Order dari user lain — tidak ditambahkan ke history lokal
+        const activeTailorName = getActiveProfileName().trim();
+        if (!activeTailorName || activeTailorName === 'Nama Anda' || !orderBelongsToTailor(order, activeTailorName)) {
+          return prev;
+        }
         return [order, ...prev];
       });
     });
@@ -306,12 +342,12 @@ const App: React.FC = () => {
     // Riwayat utama tetap dari localStorage per penjahit login.
     // Fallback: jika lokal kosong, hydrate sekali dari cloud khusus milik penjahit login.
     const hydrateLocalFromCloudIfEmpty = async () => {
-      const profileName = (localStorage.getItem('profileName') || '').trim();
+      const profileName = getActiveProfileName().trim();
       const hasValidProfile = !!profileName && profileName !== 'Nama Anda';
 
       setOrders(prev => {
         const hasLocalForProfile = prev.some(
-          o => (o.namaPenjahit || '').toLowerCase().trim() === profileName.toLowerCase()
+          o => orderBelongsToTailor(o, profileName)
         );
         if (hasLocalForProfile) return prev;
         return prev;
@@ -327,15 +363,17 @@ const App: React.FC = () => {
       })();
       const hasLocalForProfile = hasValidProfile
         ? currentLocal.some(
-            o => (o.namaPenjahit || '').toLowerCase().trim() === profileName.toLowerCase()
+            o => orderBelongsToTailor(o, profileName)
           )
         : currentLocal.length > 0;
       if (hasLocalForProfile) return;
 
-      const cloudOrders = await syncService.getGlobalOrders();
+      const cloudOrders = hasValidProfile
+        ? await syncService.getOrdersByTailor(profileName)
+        : await syncService.getGlobalOrders();
       const mineFromCloud = hasValidProfile
         ? cloudOrders.filter(
-            o => (o.namaPenjahit || '').toLowerCase().trim() === profileName.toLowerCase().trim()
+            o => orderBelongsToTailor(o, profileName)
           )
         : cloudOrders;
       if (mineFromCloud.length === 0) return;
@@ -360,7 +398,7 @@ const App: React.FC = () => {
     };
     hydrateLocalFromCloudIfEmpty().catch(e => console.error('Hydrate local history failed:', e));
 
-    const profileName = localStorage.getItem('profileName');
+    const profileName = getActiveProfileName();
     if (profileName && profileName !== 'Nama Anda') {
       // Deleted orders dari cloud juga tidak di-inject ke state
       // Hanya sync status deletedAt untuk order yang sudah ada di lokal
@@ -394,7 +432,7 @@ const App: React.FC = () => {
     } else {
       localStorage.removeItem('pending_scan_result');
     }
-    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+    const profileName = getActiveProfileName();
     notificationService.checkAndNotify(orders, profileName).catch(e => console.log('Deadline check failed:', e));
   }, [orders, isDarkMode, scanResult]);
 
@@ -441,7 +479,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+    const profileName = getActiveProfileName();
     const apiKey = localStorage.getItem('bradwear_gemini_key');
     // We let the geminiService handle the fallback to default/env keys if no user key is provided.
     
@@ -526,7 +564,7 @@ const App: React.FC = () => {
           ...extracted,
           sizeDetails: finalSizeDetails,
           jumlahPesanan: finalSizeDetails.reduce((sum, sd) => sum + (sd.jumlah || 0), 0),
-          namaPenjahit: profileName,
+          namaPenjahit: derivePrimaryTailorName(finalSizeDetails, profileName),
           source: 'scan',
           scanPayload: extracted,
           id: Math.random().toString(36).substr(2, 9),
@@ -622,7 +660,7 @@ const App: React.FC = () => {
     let order = orders.find(o => o.id === id || (o.cloudId && o.cloudId === id));
     if (!order && searchResults) order = searchResults.find(o => o.id === id || (o.cloudId && o.cloudId === id));
     if (!order) return;
-    const profileName = localStorage.getItem('profileName') || '';
+    const profileName = getActiveProfileName();
     if (profileName && order.namaPenjahit && order.namaPenjahit.toLowerCase().trim() !== profileName.toLowerCase().trim()) {
       if (!skipConfirm) triggerConfirm({ title: 'Akses Ditolak', message: `Hanya ${order.namaPenjahit} yang boleh menghapus.`, type: 'info', onConfirm: () => { } });
       return;
@@ -738,9 +776,9 @@ const App: React.FC = () => {
     syncService.pushOrderToCloud(updatedOrder).catch(e => console.error('Update Sync failed:', e));
   };
 
-  const profileName = localStorage.getItem('profileName') || '';
+  const profileName = getActiveProfileName();
   const myOrders = profileName
-    ? orders.filter(o => !o.namaPenjahit || o.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim())
+    ? orders.filter(o => !o.namaPenjahit || orderBelongsToTailor(o, profileName))
     : orders;
   const activeOrders = myOrders.filter(o => !o.deletedAt);
   const deletedOrders = myOrders.filter(o => !!o.deletedAt);

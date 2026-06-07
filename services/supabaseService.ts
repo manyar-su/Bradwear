@@ -12,6 +12,50 @@ if (!import.meta.env.VITE_SUPABASE_URL || (!import.meta.env.VITE_SUPABASE_PUBLIS
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const normalizeBradflowIdentity = (username: string) => {
+    const trimmed = username.trim().toLowerCase();
+    if (!trimmed) return null;
+
+    if (trimmed.includes('@')) {
+        const [localPart, domain] = trimmed.split('@');
+        const cleanedLocalPart = (localPart || '').replace(/[^a-z0-9._-]/g, '');
+        if (!cleanedLocalPart) return null;
+        if (domain && domain !== 'bradflow.com') {
+            throw new Error('Gunakan domain @bradflow.com.');
+        }
+        return {
+            localPart: cleanedLocalPart,
+            email: `${cleanedLocalPart}@bradflow.com`,
+        };
+    }
+
+    const cleanedLocalPart = trimmed.replace(/[^a-z0-9._-]/g, '');
+    if (!cleanedLocalPart) return null;
+    return {
+        localPart: cleanedLocalPart,
+        email: `${cleanedLocalPart}@bradflow.com`,
+    };
+};
+
+const getAuthErrorMessage = (error: unknown) => {
+    const rawMessage = error instanceof Error ? error.message : String(error || '');
+    const lowerMessage = rawMessage.toLowerCase();
+
+    if (lowerMessage.includes('email rate limit exceeded') || lowerMessage.includes('email address rate limit')) {
+        return 'Batas kirim email Supabase tercapai. Ini biasanya terjadi karena email confirmation masih aktif. Matikan email confirmation di Supabase Auth agar akun nama + PIN bisa langsung dipakai.';
+    }
+
+    if (lowerMessage.includes('invalid login credentials')) {
+        return 'Nama atau PIN tidak cocok.';
+    }
+
+    if (lowerMessage.includes('user already registered')) {
+        return 'Nama ini sudah terdaftar. Masuk saja dengan PIN yang sama.';
+    }
+
+    return rawMessage;
+};
+
 // Types
 export interface ChatMessageDB {
     id?: string;
@@ -92,18 +136,27 @@ export const supabaseService = {
     },
 
     async signUpCustomEmail(username: string, password: string) {
-        const normalized = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        const normalized = normalizeBradflowIdentity(username);
         if (!normalized) throw new Error('Nama akun tidak valid.');
-        return supabase.auth.signUp({
-            email: `${normalized}@bradflow.com`,
+        const result = await supabase.auth.signUp({
+            email: normalized.email,
             password,
-            options: { data: { display_name: username.trim(), role: 'penjahit' } }
+            options: { data: { display_name: normalized.localPart, role: 'penjahit' } }
         });
+        if (result.error) {
+            throw new Error(getAuthErrorMessage(result.error));
+        }
+        return result;
     },
 
     async signInCustomEmail(username: string, password: string) {
-        const email = username.includes('@') ? username.trim().toLowerCase() : `${username.trim().toLowerCase()}@bradflow.com`;
-        return supabase.auth.signInWithPassword({ email, password });
+        const normalized = normalizeBradflowIdentity(username);
+        if (!normalized) throw new Error('Nama akun tidak valid.');
+        const result = await supabase.auth.signInWithPassword({ email: normalized.email, password });
+        if (result.error) {
+            throw new Error(getAuthErrorMessage(result.error));
+        }
+        return result;
     },
 
     async signOut() {
@@ -237,6 +290,21 @@ export const supabaseService = {
 
         if (error) {
             console.error('Error fetching orders:', error);
+            return [];
+        }
+        return data || [];
+    },
+
+    async getOrdersByTailor(namaPenjahit: string): Promise<OrderDB[]> {
+        const { data, error } = await supabase
+            .from('orders')
+            .select('*, order_work_items(*, order_work_item_sizes(*))')
+            .is('deleted_at', null)
+            .ilike('nama_penjahit', namaPenjahit.trim())
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching orders by tailor:', error);
             return [];
         }
         return data || [];

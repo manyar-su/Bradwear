@@ -7,6 +7,7 @@ import { id as idLocale } from 'date-fns/locale/id';
 import SizeGroupingSection from '../components/SizeGrouping/SizeGroupingSection';
 
 import { syncService } from '../services/syncService';
+import { normalizeTailorName } from '../utils/tailors';
 
 interface ScanScreenProps {
   onSave: (order: OrderItem) => void;
@@ -51,6 +52,15 @@ const INITIAL_FORM_STATE: Partial<OrderItem> = {
   createCalendarReminder: false,
   modelDetail: '',
   jenisBarang: undefined
+};
+
+const derivePrimaryTailorName = (sizeDetails: any[] = [], fallbackName: string) => {
+  const detected = Array.from(new Set(
+    sizeDetails
+      .map(detail => typeof detail?.namaPenjahit === 'string' ? detail.namaPenjahit.trim() : '')
+      .filter(Boolean)
+  ));
+  return detected.length === 1 ? detected[0] : fallbackName;
 };
 
 const ScanScreen: React.FC<ScanScreenProps> = ({
@@ -122,7 +132,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   };
 
   useEffect(() => {
-    const profileName = localStorage.getItem('profileName') || 'Nama Anda';
+    const profileName = normalizeTailorName(localStorage.getItem('profileName')) || localStorage.getItem('profileName') || 'Nama Anda';
     setFormData(prev => ({ ...prev, namaPenjahit: profileName }));
     
     // Load size charts
@@ -196,7 +206,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
       setFormData(prev => ({
         ...prev,
         ...scanResultGlobal,
-        namaPenjahit: scanResultGlobal.namaPenjahit || prev.namaPenjahit || '',
+        namaPenjahit: derivePrimaryTailorName(scanResultGlobal.sizeDetails || [], scanResultGlobal.namaPenjahit || prev.namaPenjahit || ''),
         isManual: false,
         jenisBarang: detectedJenis || prev.jenisBarang,
         bahanKemeja: detectedBahan || scanResultGlobal.bahanKemeja || prev.bahanKemeja,

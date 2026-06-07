@@ -308,6 +308,16 @@ export const syncService = {
         }
     },
 
+    getOrdersByTailor: async (namaPenjahit: string): Promise<OrderItem[]> => {
+        try {
+            const orders = await supabaseService.getOrdersByTailor(namaPenjahit);
+            return orders.map(toOrderItem);
+        } catch (e) {
+            console.error("Get orders by tailor error:", e);
+            return [];
+        }
+    },
+
     // Get deleted orders for a specific tailor
     getDeletedOrders: async (namaPenjahit: string): Promise<OrderItem[]> => {
         try {

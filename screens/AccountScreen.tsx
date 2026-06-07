@@ -2,10 +2,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare, Key, CheckCircle2, Ruler } from 'lucide-react';
 import { extractSplitData } from '../services/geminiService';
-import { supabaseService } from '../services/supabaseService';
 import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus } from '../types';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
+import { normalizeTailorName } from '../utils/tailors';
 
 const DEFAULT_TAILOR_NAMES = [
   "Maris", "Ferry", "Aan", "Farid", "Opik",
@@ -67,11 +67,11 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const [showSizeChartPopup, setShowSizeChartPopup] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [isLoggedIn] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [profileName, setProfileName] = useState(() => localStorage.getItem('profileName') || 'Nama Anda');
+  const [profileName, setProfileName] = useState(() => normalizeTailorName(localStorage.getItem('profileName')) || localStorage.getItem('profileName') || 'Nama Anda');
   const [profileImage, setProfileImage] = useState(() => localStorage.getItem('profileImage') || null);
   const [isEditingName, setIsEditingName] = useState(false);
 
@@ -123,7 +123,7 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
   const profileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('profileName', profileName);
+    localStorage.setItem('profileName', normalizeTailorName(profileName) || profileName);
     localStorage.setItem('isLoggedIn', isLoggedIn.toString());
     if (profileImage) localStorage.setItem('profileImage', profileImage);
     else localStorage.removeItem('profileImage');
@@ -173,48 +173,24 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     setTimeout(() => setShowSuccessToast(false), 3000);
   };
 
-  const [loginPin, setLoginPin] = useState('');
-  const [storedPin, setStoredPin] = useState(() => localStorage.getItem('bradflow_pin') || '');
-  const [showPinSetup, setShowPinSetup] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-
-  const handleLogin = () => {
-    if (pinInput === storedPin) {
-      setIsLoggedIn(true);
-      setPinInput('');
-    } else {
-      alert("PIN Salah! Coba lagi.");
-      setPinInput('');
-    }
-  };
-
-  const handleSetPin = () => {
-    if (pinInput.length < 4) {
-      alert("PIN minimal 4 angka!");
-      return;
-    }
-    localStorage.setItem('bradflow_pin', pinInput);
-    setStoredPin(pinInput);
-    setIsLoggedIn(true);
-    setPinInput('');
-    setShowPinSetup(false);
-  };
-
-  const handleLogout = async () => {
-    await supabaseService.signOut();
-    setIsLoggedIn(false);
-  };
-
-  const handleExitApp = () => {
+  const handleSwitchTailor = () => {
     triggerConfirm({
-      title: 'Keluar Akun?',
-      message: 'Anda akan keluar dari sesi saat ini.',
+      title: 'Ganti Nama Penjahit?',
+      message: 'Nama penjahit aktif akan direset, lalu aplikasi akan meminta nama penjahit lagi.',
       type: 'warning',
       onConfirm: () => {
-        supabaseService.signOut().finally(() => setIsLoggedIn(false));
+        localStorage.removeItem('profileName');
+        localStorage.setItem('isLoggedIn', 'false');
+        window.location.reload();
       }
     });
   };
+
+  const storedPin = '';
+  const pinInput = '';
+  const setPinInput = (_value: string) => {};
+  const handleLogin = () => {};
+  const handleSetPin = () => {};
 
   const handleProfileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -525,11 +501,11 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
             <button onClick={() => profileInputRef.current?.click()} className="absolute bottom-1 right-1 p-2 bg-[#10b981] text-white rounded-full shadow-lg border-2 border-white active:scale-90 transition-all"><Camera size={14} strokeWidth={2.5} /></button>
           </div>
           <div className="text-center w-full px-10">
-            {isEditingName ? <input autoFocus className={`w-full text-xl font-black text-center bg-transparent border-b-2 focus:outline-none transition-colors ${isDarkMode ? 'text-white border-slate-700 focus:border-[#10b981]' : 'text-[#334155] border-slate-200 focus:border-[#10b981]'}`} value={profileName} onChange={(e) => setProfileName(e.target.value)} onBlur={() => setIsEditingName(false)} onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)} /> : <div className="flex items-center justify-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}><h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-[#334155]'}`}>{profileName}</h2><Edit2 size={14} className="text-slate-300 opacity-0 group-hover:opacity-100" /></div>}
+            {isEditingName ? <input autoFocus className={`w-full text-xl font-black text-center bg-transparent border-b-2 focus:outline-none transition-colors ${isDarkMode ? 'text-white border-slate-700 focus:border-[#10b981]' : 'text-[#334155] border-slate-200 focus:border-[#10b981]'}`} value={profileName} onChange={(e) => setProfileName(e.target.value)} onBlur={() => { setProfileName(prev => normalizeTailorName(prev) || prev.trim()); setIsEditingName(false); }} onKeyDown={(e) => { if (e.key === 'Enter') { setProfileName(prev => normalizeTailorName(prev) || prev.trim()); setIsEditingName(false); } }} /> : <div className="flex items-center justify-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}><h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-[#334155]'}`}>{profileName}</h2><Edit2 size={14} className="text-slate-300 opacity-0 group-hover:opacity-100" /></div>}
             <div className="mt-2 flex flex-col items-center gap-2">
               <div className="flex items-center gap-2 bg-[#e6f7ef] px-4 py-1.5 rounded-full border border-[#10b981]/20">
                 <Cloud className="text-[#10b981]" size={14} />
-                <span className="text-[10px] font-black text-[#10b981] uppercase tracking-widest">{isLoggedIn ? 'Online' : 'Offline Mode'}</span>
+                <span className="text-[10px] font-black text-[#10b981] uppercase tracking-widest">Nama Aktif</span>
               </div>
             </div>
           </div>
@@ -606,8 +582,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
               </div>
             </div>
 
-            <button onClick={handleExitApp} className="w-full p-4 rounded-3xl bg-red-50 text-red-500 flex items-center justify-between active:scale-95 transition-all border border-red-100 shadow-sm">
-              <div className="flex items-center gap-4"><div className="p-2 bg-white rounded-xl shadow-sm"><LogOut size={20} /></div><span className="font-black uppercase text-[11px] tracking-widest">Keluar Akun</span></div>
+            <button onClick={handleSwitchTailor} className="w-full p-4 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-between active:scale-95 transition-all border border-amber-100 shadow-sm">
+              <div className="flex items-center gap-4"><div className="p-2 bg-white rounded-xl shadow-sm"><LogOut size={20} /></div><span className="font-black uppercase text-[11px] tracking-widest">Ganti Nama Penjahit</span></div>
               <ChevronRight size={18} />
             </button>
           </div>

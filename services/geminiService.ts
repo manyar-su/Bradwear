@@ -11,6 +11,126 @@ const DEFAULT_OPENROUTER_MODELS = [
   'gemini/gemini-3-flash-preview',
 ];
 
+const COLOR_PATTERNS = [
+  'TROPICAL BIRU MUDA',
+  'TROPICAL BIRU TUA',
+  'TROPICAL NAVY',
+  'TROPICAL KHAKI',
+  'TROPICAL PUTIH',
+  'TROPICAL HITAM',
+  'TROPICAL ABU',
+  'AMERICAN DRILL HITAM',
+  'AMERICAN DRILL PUTIH',
+  'AMERICAN DRILL NAVY',
+  'JAPAN DRILL HITAM',
+  'JAPAN DRILL NAVY',
+  'MARYLAND PUTIH',
+  'MARYLAND HITAM',
+  'OXFORD PUTIH',
+  'OXFORD BIRU',
+  'RIPSTOP HITAM',
+  'CANVAS HITAM',
+  'BIRU MUDA',
+  'BIRU TUA',
+  'KHAKI',
+  'NAVY',
+  'PUTIH',
+  'HITAM',
+  'ABU ABU',
+  'ABU',
+  'MERAH',
+  'HIJAU',
+  'KUNING',
+  'COKLAT',
+];
+
+const MODEL_PATTERNS = [
+  { needle: 'BRAD V1', value: 'Brad V1' },
+  { needle: 'BRAD V-1', value: 'Brad V1' },
+  { needle: 'BRAD V 1', value: 'Brad V1' },
+  { needle: 'BRAD V2', value: 'Brad V2' },
+  { needle: 'BRAD V-2', value: 'Brad V2' },
+  { needle: 'BRAD V 2', value: 'Brad V2' },
+  { needle: 'BRAD V3', value: 'Brad V3' },
+  { needle: 'BRAD V-3', value: 'Brad V3' },
+  { needle: 'BRAD V 3', value: 'Brad V3' },
+  { needle: 'VENTURA', value: 'Ventura' },
+  { needle: 'YOROI', value: 'Yoroi' },
+  { needle: 'PDH BARU', value: 'PDH Baru' },
+  { needle: 'PDH', value: 'PDH' },
+];
+
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+const normalizeDetectedColor = (value: unknown) => {
+  if (typeof value !== 'string') return '';
+  return normalizeSpaces(value.toUpperCase());
+};
+
+const extractDetectedColors = (...sources: Array<unknown>) => {
+  const found: string[] = [];
+  const seen = new Set<string>();
+
+  sources.forEach((source) => {
+    if (typeof source !== 'string' || !source.trim()) return;
+    const text = normalizeDetectedColor(source);
+
+    COLOR_PATTERNS.forEach((pattern) => {
+      if (text.includes(pattern) && !seen.has(pattern)) {
+        seen.add(pattern);
+        found.push(pattern);
+      }
+    });
+  });
+
+  return found;
+};
+
+const deriveOrderColorValue = (result: any) => {
+  const detailColors = Array.isArray(result.sizeDetails)
+    ? result.sizeDetails
+        .flatMap((item: any) => [
+          normalizeDetectedColor(item?.warna),
+          ...(Array.isArray(item?.sizes)
+            ? item.sizes.map((sizeItem: any) => normalizeDetectedColor(sizeItem?.warna))
+            : []),
+        ])
+        .filter(Boolean)
+    : [];
+
+  const detectedColors = [
+    ...detailColors,
+    ...extractDetectedColors(result.warna, result.deskripsiPekerjaan, result.ocrText),
+  ];
+
+  const uniqueColors = Array.from(new Set(detectedColors));
+  if (uniqueColors.length === 0) return '';
+  if (uniqueColors.length === 1) return uniqueColors[0];
+  return uniqueColors.join(', ');
+};
+
+const deriveOrderModelValue = (result: any) => {
+  const detailModels = Array.isArray(result.sizeDetails)
+    ? result.sizeDetails
+        .flatMap((item: any) => [typeof item?.model === 'string' ? item.model.trim() : ''])
+        .filter(Boolean)
+    : [];
+
+  const directModel = typeof result.model === 'string' ? result.model.trim() : '';
+  if (directModel) return directModel;
+
+  if (detailModels.length > 0) {
+    return detailModels[0];
+  }
+
+  const haystack = normalizeDetectedColor(
+    [result.modelDetail, result.deskripsiPekerjaan, result.ocrText].filter(Boolean).join(' ')
+  );
+
+  const matchedModel = MODEL_PATTERNS.find((pattern) => haystack.includes(pattern.needle));
+  return matchedModel?.value || '';
+};
+
 const PROMPT_OCR = `Extract exact text data from this order slip image. 
 Act as a high-precision OCR engine with ADVANCED SIZE AND QUANTITY DETECTION.
 
@@ -464,6 +584,14 @@ export const extractOrderData = async (base64Image: string) => {
 
 const processResult = (result: any) => {
     result.kodeBarang = resolveKodeBarang(result);
+    const fallbackOrderColor = deriveOrderColorValue(result);
+    const fallbackOrderModel = deriveOrderModelValue(result);
+    if (!normalizeDetectedColor(result.warna) && fallbackOrderColor) {
+      result.warna = fallbackOrderColor;
+    }
+    if (!(typeof result.model === 'string' && result.model.trim()) && fallbackOrderModel) {
+      result.model = fallbackOrderModel;
+    }
 
     // AUTO-DETECT jenisBarang dari deskripsi jika belum terdeteksi
     if (!result.jenisBarang && result.deskripsiPekerjaan) {
@@ -511,7 +639,10 @@ const processResult = (result: any) => {
 
     // NORMALIZE GENDER & POPULATE FIELDS
     if (result.sizeDetails && Array.isArray(result.sizeDetails)) {
-      result.sizeDetails = result.sizeDetails.map((item: any) => {
+      const detectedOrderColors = extractDetectedColors(result.warna, result.deskripsiPekerjaan, result.ocrText);
+      const missingColorItems = result.sizeDetails.filter((item: any) => !normalizeDetectedColor(item?.warna));
+
+      result.sizeDetails = result.sizeDetails.map((item: any, index: number) => {
         let gender = item.gender || 'Pria';
         const gLower = gender.toLowerCase().trim();
         const itemTailorName = normalizeTailorName(item.namaPenjahit) || normalizeTailorName(item.namaPerSize);
@@ -566,7 +697,11 @@ const processResult = (result: any) => {
         const processedItem: any = {
           ...item,
           gender,
-          warna: item.warna || result.warna || '',
+          warna:
+            normalizeDetectedColor(item.warna) ||
+            (missingColorItems.length === result.sizeDetails.length && detectedOrderColors[index])
+            || normalizeDetectedColor(result.warna)
+            || '',
           namaPenjahit: itemTailorName,
           candidateTailorName: itemTailorName ? undefined : itemCandidateTailorName,
           tailorConfirmationStatus: itemTailorName
