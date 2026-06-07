@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Shield, Info, LogOut, ChevronRight, FileText, Layers, Loader2, X, Camera, DollarSign, Cloud, Edit2, Upload, Send, Calendar, Package, TrendingUp, Sparkles, Code2, Users, Plus, Minus, Trash2, Check, Save, RotateCcw, Scissors, ArrowUpRight, AlertTriangle, MessageSquare, Key, CheckCircle2, Ruler } from 'lucide-react';
 import { extractSplitData } from '../services/geminiService';
+import { supabaseService } from '../services/supabaseService';
 import { PRICE_LIST as DEFAULT_PRICE_LIST, OrderItem, JobStatus } from '../types';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
@@ -199,7 +200,8 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     setShowPinSetup(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabaseService.signOut();
     setIsLoggedIn(false);
   };
 
@@ -208,7 +210,9 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
       title: 'Keluar Akun?',
       message: 'Anda akan keluar dari sesi saat ini.',
       type: 'warning',
-      onConfirm: () => setIsLoggedIn(false)
+      onConfirm: () => {
+        supabaseService.signOut().finally(() => setIsLoggedIn(false));
+      }
     });
   };
 
@@ -480,7 +484,7 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
     let text = `*LAPORAN PRODUKSI BRADWEAR FLOW*\n`;
     text += `*Bulan:* ${month}\n\n`;
     text += `📦 *Total Produksi:* ${data.totalPcs} PCS\n`;
-    text += `💰 *Perkiraan Omset (Beres):* Rp ${data.totalEarnings.toLocaleString()}\n`;
+    text += `💰 *Perkiraan Omset (Selesai):* Rp ${data.totalEarnings.toLocaleString()}\n`;
     text += `📋 *Jumlah Pesanan:* ${data.totalOrders}\n\n`;
     text += `_Detail Pesanan:_\n`;
 
@@ -824,7 +828,7 @@ const AccountScreen = ({ isDarkMode, orders = [], deletedOrders = [], onRestore,
                       <span className="text-lg font-black">{data.totalPcs} PCS</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-slate-400 uppercase">Omset (Beres)</span>
+                      <span className="text-[8px] font-black text-slate-400 uppercase">Omset (Selesai)</span>
                       <span className="text-lg font-black text-[#10b981]">Rp {(data.totalEarnings / 1000).toFixed(0)}K</span>
                     </div>
                   </div>

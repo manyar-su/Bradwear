@@ -1,5 +1,6 @@
 import { OrderItem, ChatMessage } from '../types';
-import { supabaseService, OrderDB } from './supabaseService';
+import { supabaseService, OrderDB, WorkItemDB } from './supabaseService';
+import { getGroupKey } from '../utils/sizeGrouping';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale/id';
 
@@ -8,6 +9,97 @@ const LOCAL_ORDERS_KEY = 'tailor_orders';
 const CLOUD_CHAT_KEY = 'bradwear_global_chat';
 const GLOBAL_NOTIF_KEY = 'bradwear_global_notif';
 const GLOBAL_NOTIF_EVENT = 'bradwear-global-notif';
+const OUTBOX_KEY = 'bradflow_sync_outbox';
+
+type OutboxOperation =
+    | { id: string; type: 'save'; order: OrderItem; createdAt: string }
+    | { id: string; type: 'status'; cloudId: string; status: 'Proses' | 'Selesai'; createdAt: string };
+type NewOutboxOperation =
+    | { type: 'save'; order: OrderItem }
+    | { type: 'status'; cloudId: string; status: 'Proses' | 'Selesai' };
+
+const readOutbox = (): OutboxOperation[] => {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const queueOutbox = (operation: NewOutboxOperation) => {
+    const outbox = readOutbox();
+    outbox.push({ ...operation, id: crypto.randomUUID(), createdAt: new Date().toISOString() } as OutboxOperation);
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
+};
+
+const toWorkItems = (order: OrderItem): WorkItemDB[] => {
+    const groups = new Map<string, WorkItemDB>();
+
+    order.sizeDetails.forEach((detail, index) => {
+        const key = getGroupKey(detail, order.jenisBarang);
+        if (!groups.has(key)) {
+            groups.set(key, {
+                sort_order: groups.size,
+                warna: detail.warna || order.warna,
+                assigned_tailor_name: detail.namaPenjahit || undefined,
+                candidate_tailor_name: detail.candidateTailorName,
+                tailor_confirmation_status: detail.tailorConfirmationStatus || (detail.candidateTailorName ? 'needs_confirmation' : 'confirmed'),
+                gender: detail.gender,
+                tangan: detail.tangan,
+                model: detail.model || order.model,
+                item_attributes: {
+                    sakuType: detail.sakuType,
+                    sakuColor: detail.sakuColor,
+                    bahanKemeja: detail.bahanKemeja,
+                    modelCelana: detail.modelCelana,
+                    bahanCelana: detail.bahanCelana,
+                    modelRompi: detail.modelRompi,
+                    jenisSakuRompi: detail.jenisSakuRompi,
+                },
+                pcs_total: 0,
+                sizes: [],
+            });
+        }
+
+        const group = groups.get(key)!;
+        group.pcs_total += detail.jumlah || 0;
+        group.sizes.push({
+            sort_order: index,
+            size: detail.size || '',
+            quantity: detail.jumlah || 0,
+            nama_per_size: detail.namaPerSize,
+            is_custom_size: !!detail.isCustomSize,
+            custom_measurements: detail.customMeasurements as Record<string, unknown> | undefined,
+        });
+    });
+
+    return Array.from(groups.values());
+};
+
+const relationalSizeDetails = (db: OrderDB) => {
+    if (!db.order_work_items?.length) return db.size_details || [];
+
+    return [...db.order_work_items]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .flatMap(item => [...(item.order_work_item_sizes || [])]
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map(size => ({
+                size: size.size,
+                jumlah: size.quantity,
+                namaPerSize: size.nama_per_size,
+                isCustomSize: size.is_custom_size,
+                customMeasurements: size.custom_measurements,
+                warna: item.warna,
+                namaPenjahit: item.assigned_tailor_name,
+                candidateTailorName: item.candidate_tailor_name,
+                tailorConfirmationStatus: item.tailor_confirmation_status,
+                gender: item.gender || 'Pria',
+                tangan: item.tangan || 'Pendek',
+                model: item.model,
+                ...(item.item_attributes || {}),
+            })));
+};
 
 // Convert local OrderItem to Supabase format
 const toOrderDB = (order: OrderItem): Omit<OrderDB, 'id' | 'created_at' | 'updated_at'> & { id?: string } => ({
@@ -32,7 +124,10 @@ const toOrderDB = (order: OrderItem): Omit<OrderDB, 'id' | 'created_at' | 'updat
     embroidery_status: order.embroideryStatus || null,
     embroidery_notes: order.embroideryNotes || null,
     completed_at: order.completedAt || null,
-    deleted_at: order.deletedAt || null
+    deleted_at: order.deletedAt || null,
+    owner_user_id: order.ownerUserId,
+    source: order.source || (order.isManual ? 'manual' : 'scan'),
+    scan_payload: order.scanPayload
 });
 
 // Convert Supabase OrderDB to local format
@@ -55,20 +150,30 @@ export const toOrderItem = (db: OrderDB): OrderItem => ({
     paymentStatus: db.payment_status as any || 'Belum Bayar',
     priority: (db.priority as any) || 'Medium',
     deskripsiPekerjaan: db.deskripsi_pekerjaan || '',
-    sizeDetails: db.size_details || [],
+    sizeDetails: relationalSizeDetails(db),
     embroideryStatus: (db.embroidery_status as any) || 'Lengkap',
     embroideryNotes: db.embroidery_notes || '',
     completedAt: db.completed_at || null,
     createdAt: db.created_at || new Date().toISOString(),
-    deletedAt: db.deleted_at || undefined
+    deletedAt: db.deleted_at || undefined,
+    ownerUserId: db.owner_user_id,
+    source: db.source,
+    scanPayload: db.scan_payload,
+    updatedAt: db.updated_at
 });
 
 export const syncService = {
     // Pushes a local order to Supabase (public cloud)
     pushOrderToCloud: async (order: OrderItem): Promise<OrderItem | null> => {
+        if (!navigator.onLine) {
+            queueOutbox({ type: 'save', order });
+            return order;
+        }
         try {
             console.log('Pushing order to Supabase:', order.kodeBarang);
-            const result = await supabaseService.upsertOrder(toOrderDB(order));
+            const user = await supabaseService.getCurrentUser();
+            const orderWithOwner = { ...order, ownerUserId: order.ownerUserId || user?.id };
+            const result = await supabaseService.saveOrderWithItems(toOrderDB(orderWithOwner), toWorkItems(orderWithOwner));
             if (result) {
                 console.log('Order pushed successfully:', result);
                 const updatedItem = toOrderItem(result);
@@ -89,8 +194,55 @@ export const syncService = {
             return null;
         } catch (e) {
             console.error("Sync Error:", e);
+            queueOutbox({ type: 'save', order });
             return null;
         }
+    },
+
+    updateOrderStatus: async (order: OrderItem, status: 'Proses' | 'Selesai'): Promise<OrderItem | null> => {
+        const cloudId = order.cloudId;
+        const updatedOrder = {
+            ...order,
+            status: status as any,
+            completedAt: status === 'Selesai' ? new Date().toISOString() : null,
+        };
+        if (!cloudId) {
+            queueOutbox({ type: 'save', order: updatedOrder });
+            return updatedOrder;
+        }
+        if (!navigator.onLine) {
+            queueOutbox({ type: 'status', cloudId, status });
+            return updatedOrder;
+        }
+        try {
+            return toOrderItem(await supabaseService.updateOrderStatus(cloudId, status));
+        } catch (error) {
+            console.error('Status sync failed:', error);
+            queueOutbox({ type: 'status', cloudId, status });
+            return null;
+        }
+    },
+
+    flushOutbox: async (): Promise<void> => {
+        if (!navigator.onLine) return;
+        const pending = readOutbox();
+        const failed: OutboxOperation[] = [];
+
+        for (const operation of pending) {
+            try {
+                if (operation.type === 'save') {
+                    const user = await supabaseService.getCurrentUser();
+                    const order = { ...operation.order, ownerUserId: operation.order.ownerUserId || user?.id };
+                    await supabaseService.saveOrderWithItems(toOrderDB(order), toWorkItems(order));
+                } else {
+                    await supabaseService.updateOrderStatus(operation.cloudId, operation.status);
+                }
+            } catch {
+                failed.push(operation);
+            }
+        }
+
+        localStorage.setItem(OUTBOX_KEY, JSON.stringify(failed));
     },
 
     // Check if code exists globally in Supabase

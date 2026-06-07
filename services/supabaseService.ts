@@ -52,10 +52,64 @@ export interface OrderDB {
     created_at?: string;
     updated_at?: string;
     deleted_at?: string;
+    owner_user_id?: string;
+    source?: 'scan' | 'manual' | 'migration';
+    scan_payload?: Record<string, unknown>;
+    order_work_items?: Array<WorkItemDB & {
+        id: string;
+        order_id: string;
+        order_work_item_sizes?: Array<WorkItemDB['sizes'][number] & { id: string }>;
+    }>;
+}
+
+export interface WorkItemDB {
+    sort_order: number;
+    warna?: string;
+    assigned_tailor_user_id?: string;
+    assigned_tailor_name?: string;
+    candidate_tailor_name?: string;
+    tailor_confirmation_status: 'confirmed' | 'needs_confirmation' | 'not_tailor';
+    gender?: string;
+    tangan?: string;
+    model?: string;
+    item_attributes: Record<string, unknown>;
+    pcs_total: number;
+    sizes: Array<{
+        sort_order: number;
+        size: string;
+        quantity: number;
+        nama_per_size?: string;
+        is_custom_size: boolean;
+        custom_measurements?: Record<string, unknown>;
+    }>;
 }
 
 // Supabase Service
 export const supabaseService = {
+    async getCurrentUser() {
+        const { data } = await supabase.auth.getUser();
+        return data.user || null;
+    },
+
+    async signUpCustomEmail(username: string, password: string) {
+        const normalized = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        if (!normalized) throw new Error('Nama akun tidak valid.');
+        return supabase.auth.signUp({
+            email: `${normalized}@bradflow.com`,
+            password,
+            options: { data: { display_name: username.trim(), role: 'penjahit' } }
+        });
+    },
+
+    async signInCustomEmail(username: string, password: string) {
+        const email = username.includes('@') ? username.trim().toLowerCase() : `${username.trim().toLowerCase()}@bradflow.com`;
+        return supabase.auth.signInWithPassword({ email, password });
+    },
+
+    async signOut() {
+        return supabase.auth.signOut();
+    },
+
     // ============ CHAT MESSAGES ============
     async getChatMessages(): Promise<ChatMessageDB[]> {
         const { data, error } = await supabase
@@ -177,7 +231,7 @@ export const supabaseService = {
     async getGlobalOrders(): Promise<OrderDB[]> {
         const { data, error } = await supabase
             .from('orders')
-            .select('*')
+            .select('*, order_work_items(*, order_work_item_sizes(*))')
             .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
@@ -191,7 +245,7 @@ export const supabaseService = {
     async getDeletedOrders(namaPenjahit: string): Promise<OrderDB[]> {
         const { data, error } = await supabase
             .from('orders')
-            .select('*')
+            .select('*, order_work_items(*, order_work_item_sizes(*))')
             .not('deleted_at', 'is', null)
             .ilike('nama_penjahit', namaPenjahit)
             .order('deleted_at', { ascending: false });
@@ -219,7 +273,7 @@ export const supabaseService = {
     async searchOrdersByCode(kodeBarang: string): Promise<OrderDB[]> {
         const { data, error } = await supabase
             .from('orders')
-            .select('*')
+            .select('*, order_work_items(*, order_work_item_sizes(*))')
             .ilike('kode_barang', `%${kodeBarang}%`)
             .is('deleted_at', null);
 
@@ -233,7 +287,7 @@ export const supabaseService = {
     async searchOrdersByTailor(namaPenjahit: string): Promise<OrderDB[]> {
         const { data, error } = await supabase
             .from('orders')
-            .select('*')
+            .select('*, order_work_items(*, order_work_item_sizes(*))')
             .ilike('nama_penjahit', `%${namaPenjahit}%`)
             .is('deleted_at', null);
 
@@ -295,12 +349,68 @@ export const supabaseService = {
         }
     },
 
+    async saveOrderWithItems(order: Omit<OrderDB, 'created_at' | 'updated_at'>, workItems: WorkItemDB[]): Promise<OrderDB | null> {
+        const { data, error } = await supabase.rpc('save_order_with_items', {
+            p_order: order,
+            p_work_items: workItems
+        });
+
+        if (error) {
+            console.error('Error saving relational order:', error);
+            throw error;
+        }
+        return data as OrderDB;
+    },
+
+    async updateOrderStatus(id: string, status: 'Proses' | 'Selesai'): Promise<OrderDB> {
+        const { data, error } = await supabase.rpc('update_order_status', {
+            p_order_id: id,
+            p_status: status,
+            p_source_app: 'bradflow'
+        });
+
+        if (error) throw error;
+        return data as OrderDB;
+    },
+
     subscribeToOrders(callback: (payload: any) => void): RealtimeChannel {
         return supabase
             .channel('orders_global_sync')
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
                 (payload) => callback(payload)
+            )
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'order_work_items' },
+                async (payload) => {
+                    const orderId = (payload.new as any)?.order_id || (payload.old as any)?.order_id;
+                    if (!orderId) return;
+                    const { data } = await supabase
+                        .from('orders')
+                        .select('*, order_work_items(*, order_work_item_sizes(*))')
+                        .eq('id', orderId)
+                        .maybeSingle();
+                    if (data) callback({ eventType: 'UPDATE', new: data });
+                }
+            )
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'order_work_item_sizes' },
+                async (payload) => {
+                    const workItemId = (payload.new as any)?.work_item_id || (payload.old as any)?.work_item_id;
+                    if (!workItemId) return;
+                    const { data: workItem } = await supabase
+                        .from('order_work_items')
+                        .select('order_id')
+                        .eq('id', workItemId)
+                        .maybeSingle();
+                    if (!workItem?.order_id) return;
+                    const { data } = await supabase
+                        .from('orders')
+                        .select('*, order_work_items(*, order_work_item_sizes(*))')
+                        .eq('id', workItem.order_id)
+                        .maybeSingle();
+                    if (data) callback({ eventType: 'UPDATE', new: data });
+                }
             )
             .subscribe();
     },

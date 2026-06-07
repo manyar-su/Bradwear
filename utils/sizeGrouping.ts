@@ -4,12 +4,17 @@ import { SizeDetail, SizeGroup, JenisBarang, ModelCelana, ModelRompi } from '../
  * Generate a unique grouping key based on jenis barang and category attributes
  */
 export function getGroupKey(sd: SizeDetail, jenisBarang?: JenisBarang): string {
+  const sharedValues = [
+    (sd.warna || '').trim().toLowerCase(),
+    (sd.namaPenjahit || sd.candidateTailorName || '').trim().toLowerCase(),
+  ].filter(Boolean);
+  const sharedKey = sharedValues.length > 0 ? `${sharedValues.join('_')}_` : '';
   if (jenisBarang === JenisBarang.KEMEJA || !jenisBarang) {
-    return `${sd.gender || 'Pria'}_${sd.tangan || 'Pendek'}`;
+    return `${sharedKey}${sd.gender || 'Pria'}_${sd.tangan || 'Pendek'}`;
   } else if (jenisBarang === JenisBarang.CELANA) {
-    return `${sd.modelCelana || ModelCelana.WARRIOR}`;
+    return `${sharedKey}${sd.modelCelana || ModelCelana.WARRIOR}`;
   } else if (jenisBarang === JenisBarang.ROMPI) {
-    return `${sd.modelRompi || 'Bupati'}`;
+    return `${sharedKey}${sd.modelRompi || 'Bupati'}`;
   }
   return 'default';
 }
@@ -23,11 +28,21 @@ export function areGroupsEqual(
   jenisBarang?: JenisBarang
 ): boolean {
   if (jenisBarang === JenisBarang.KEMEJA || !jenisBarang) {
-    return group1.gender === group2.gender && group1.tangan === group2.tangan;
+    return group1.gender === group2.gender &&
+      group1.tangan === group2.tangan &&
+      group1.warna === group2.warna &&
+      group1.namaPenjahit === group2.namaPenjahit &&
+      group1.candidateTailorName === group2.candidateTailorName;
   } else if (jenisBarang === JenisBarang.CELANA) {
-    return group1.modelCelana === group2.modelCelana;
+    return group1.modelCelana === group2.modelCelana &&
+      group1.warna === group2.warna &&
+      group1.namaPenjahit === group2.namaPenjahit &&
+      group1.candidateTailorName === group2.candidateTailorName;
   } else if (jenisBarang === JenisBarang.ROMPI) {
-    return group1.modelRompi === group2.modelRompi;
+    return group1.modelRompi === group2.modelRompi &&
+      group1.warna === group2.warna &&
+      group1.namaPenjahit === group2.namaPenjahit &&
+      group1.candidateTailorName === group2.candidateTailorName;
   }
   return false;
 }
@@ -40,11 +55,17 @@ export function getCategoryDisplayName(
   jenisBarang?: JenisBarang
 ): string {
   if (jenisBarang === JenisBarang.KEMEJA || !jenisBarang) {
-    return `Tangan ${group.tangan || 'Pendek'}`;
+    return [group.warna, group.namaPenjahit || group.candidateTailorName, `Tangan ${group.tangan || 'Pendek'}`]
+      .filter(Boolean)
+      .join(' · ');
   } else if (jenisBarang === JenisBarang.CELANA) {
-    return group.modelCelana || ModelCelana.WARRIOR;
+    return [group.warna, group.namaPenjahit || group.candidateTailorName, group.modelCelana || ModelCelana.WARRIOR]
+      .filter(Boolean)
+      .join(' · ');
   } else if (jenisBarang === JenisBarang.ROMPI) {
-    return group.modelRompi || 'Bupati';
+    return [group.warna, group.namaPenjahit || group.candidateTailorName, group.modelRompi || 'Bupati']
+      .filter(Boolean)
+      .join(' · ');
   }
   return 'Unknown';
 }
@@ -86,6 +107,9 @@ export function deserializeSizeDetails(
           modelRompi: sd.modelRompi,
           // Copy shared attributes
           warna: sd.warna,
+          namaPenjahit: sd.namaPenjahit,
+          candidateTailorName: sd.candidateTailorName,
+          tailorConfirmationStatus: sd.tailorConfirmationStatus || (sd.candidateTailorName ? 'needs_confirmation' : 'confirmed'),
           model: sd.model,
           sakuType: sd.sakuType,
           sakuColor: sd.sakuColor,
@@ -159,6 +183,9 @@ export function serializeSizeGroups(
         customMeasurements: sizeItem.customMeasurements,
         // Copy shared attributes
         warna: group.warna,
+        namaPenjahit: group.namaPenjahit,
+        candidateTailorName: group.candidateTailorName,
+        tailorConfirmationStatus: group.tailorConfirmationStatus,
         model: group.model,
         sakuType: group.sakuType,
         sakuColor: group.sakuColor,

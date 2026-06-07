@@ -1091,7 +1091,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           </div>
           <div className={`p-5 rounded-[2rem] border shadow-sm flex flex-col items-center text-center ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`}>
             <Clock className="text-blue-500 mb-2" size={20} />
-            <p className="text-[8px] text-slate-400 font-black uppercase tracking-wider">Beres</p>
+            <p className="text-[8px] text-slate-400 font-black uppercase tracking-wider">Selesai</p>
             <p className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{stats.completed}</p>
           </div>
         </div>

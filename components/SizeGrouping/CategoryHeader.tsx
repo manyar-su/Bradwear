@@ -1,5 +1,6 @@
 import React from 'react';
 import { JenisBarang, ModelCelana, ModelRompi, JenisSakuRompi } from '../../types';
+import { TAILOR_NAMES } from '../../utils/tailors';
 
 interface CategoryHeaderProps {
   jenisBarang?: JenisBarang;
@@ -7,10 +8,17 @@ interface CategoryHeaderProps {
   tangan?: 'Panjang' | 'Pendek';
   modelCelana?: ModelCelana;
   modelRompi?: ModelRompi;
+  warna?: string;
+  namaPenjahit?: string;
+  candidateTailorName?: string;
+  tailorConfirmationStatus?: 'confirmed' | 'needs_confirmation' | 'not_tailor';
   onGenderChange?: (value: 'Pria' | 'Wanita') => void;
   onTanganChange?: (value: 'Panjang' | 'Pendek') => void;
   onModelCelanaChange?: (value: ModelCelana) => void;
   onModelRompiChange?: (value: ModelRompi) => void;
+  onWarnaChange?: (value: string) => void;
+  onNamaPenjahitChange?: (value: string) => void;
+  onMarkCandidateNotTailor?: () => void;
   isDarkMode: boolean;
 }
 
@@ -20,10 +28,17 @@ const CategoryHeader: React.FC<CategoryHeaderProps> = ({
   tangan,
   modelCelana,
   modelRompi,
+  warna,
+  namaPenjahit,
+  candidateTailorName,
+  tailorConfirmationStatus,
   onGenderChange,
   onTanganChange,
   onModelCelanaChange,
   onModelRompiChange,
+  onWarnaChange,
+  onNamaPenjahitChange,
+  onMarkCandidateNotTailor,
   isDarkMode,
 }) => {
   const selectStyle = `w-full px-3 py-2.5 md:px-5 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase outline-none border appearance-none bg-no-repeat bg-[right_0.8rem_center] md:bg-[right_1.2rem_center] ${
@@ -34,8 +49,50 @@ const CategoryHeader: React.FC<CategoryHeaderProps> = ({
     isDarkMode ? '%23475569' : '%2394a3b8'
   }' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`;
 
+  const sharedFields = (
+    <div className="mb-3 md:mb-4 space-y-2">
+      <div className="grid grid-cols-2 gap-2 md:gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Warna</label>
+          <input
+            className={selectStyle}
+            value={warna || ''}
+            placeholder="Contoh: Tropical Navy"
+            onChange={(event) => onWarnaChange?.(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Penjahit</label>
+          <select
+            className={selectStyle}
+            style={{ backgroundImage: arrowIcon }}
+            value={namaPenjahit || ''}
+            onChange={(event) => onNamaPenjahitChange?.(event.target.value)}
+          >
+            <option value="">Belum ditentukan</option>
+            {TAILOR_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </div>
+      </div>
+      {candidateTailorName && tailorConfirmationStatus === 'needs_confirmation' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-700">
+          <p className="text-[9px] font-black uppercase">Nama OCR perlu konfirmasi: {candidateTailorName}</p>
+          <button
+            type="button"
+            onClick={onMarkCandidateNotTailor}
+            className="mt-2 rounded-lg bg-white px-3 py-1.5 text-[8px] font-black uppercase border border-amber-200"
+          >
+            Bukan Penjahit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (jenisBarang === JenisBarang.KEMEJA || !jenisBarang) {
     return (
+      <>
+      {sharedFields}
       <div className="grid grid-cols-2 gap-2 md:gap-3 mb-3 md:mb-4">
         <div className="flex flex-col gap-1 md:gap-2">
           <label className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 md:ml-2">
@@ -67,10 +124,11 @@ const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           </select>
         </div>
       </div>
+      </>
     );
   } else if (jenisBarang === JenisBarang.CELANA) {
     return (
-      <div className="mb-3 md:mb-4">
+      <><div>{sharedFields}</div><div className="mb-3 md:mb-4">
         <label className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 md:ml-2 block mb-1 md:mb-2">
           Model Celana
         </label>
@@ -83,11 +141,11 @@ const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           <option value={ModelCelana.WARRIOR}>{ModelCelana.WARRIOR}</option>
           <option value={ModelCelana.ARMOR}>{ModelCelana.ARMOR}</option>
         </select>
-      </div>
+      </div></>
     );
   } else if (jenisBarang === JenisBarang.ROMPI) {
     return (
-      <div className="mb-3 md:mb-4">
+      <><div>{sharedFields}</div><div className="mb-3 md:mb-4">
         <label className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 md:ml-2 block mb-1 md:mb-2">
           Model Rompi
         </label>
@@ -100,7 +158,7 @@ const CategoryHeader: React.FC<CategoryHeaderProps> = ({
           <option value={ModelRompi.BUPATI}>{ModelRompi.BUPATI}</option>
           <option value={ModelRompi.CUSTOM}>{ModelRompi.CUSTOM}</option>
         </select>
-      </div>
+      </div></>
     );
   }
 

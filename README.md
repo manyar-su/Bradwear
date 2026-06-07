@@ -109,6 +109,40 @@ npm run dev
 npm run build
 ```
 
+### Vercel yang aman saat ganti project
+Jangan pakai `vercel deploy` langsung kalau sering pindah project. Pakai helper ini supaya target project selalu eksplisit:
+
+```bash
+npm run vercel:status
+npm run vercel:switch -- bradwearflow --scope manyar-sus-projects
+npm run vercel:deploy -- bradwearflow --scope manyar-sus-projects
+npm run vercel:deploy:prod -- bradwearflow --scope manyar-sus-projects
+```
+
+Aturannya:
+- `vercel:switch` selalu relink folder ini ke project yang Anda sebut.
+- `vercel:deploy` otomatis memanggil `switch` dulu, jadi deploy tidak jalan ke project lama.
+- Selalu sebut `--scope` agar tidak salah masuk ke akun/team lain.
+
+### Supabase Tracking Schema
+Bradflow memakai Supabase sebagai sumber data utama. Jalankan SQL berikut secara berurutan melalui Supabase SQL Editor:
+
+```text
+supabase/migrations/20260607110000_user_roles.sql
+supabase/migrations/20260607120000_tracking_schema.sql
+```
+
+Konfigurasi Auth yang diperlukan:
+- Aktifkan Email/Password.
+- Matikan email confirmation karena akun memakai format internal `nama@bradflow.com`.
+- Pastikan Realtime aktif untuk `orders`, `order_work_items`, `order_work_item_sizes`, dan `order_status_history`.
+
+Data tracking lintas website tersedia di:
+- `orders`: header dan status kode barang.
+- `order_work_items`: div rincian berdasarkan warna/PJ/gender/tangan.
+- `order_work_item_sizes`: baris size dan jumlah.
+- `order_status_history`: audit perubahan `Proses`/`Selesai`.
+
 ### Sync & Build Android
 ```bash
 npx cap sync android

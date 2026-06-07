@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { validateAndFormatKodeBarang } from "../utils/kodeBarangWarna";
+import { TAILOR_NAMES, normalizeTailorName } from "../utils/tailors";
 
 const OPENROUTER_KEY = (import.meta as any).env.VITE_OPENROUTER_KEY || '';
 const DEFAULT_GEMINI_KEY = '';
@@ -9,8 +10,6 @@ const DEFAULT_OPENROUTER_MODELS = [
   'gemini/gemini-2.5-flash-lite',
   'gemini/gemini-3-flash-preview',
 ];
-const TAILOR_NAMES = ["Maris", "Ferry", "Aan", "Farid", "Opik", "Fadil", "Asep", "Abdul", "Hadi", "Epul"];
-const TAILOR_NAME_LOOKUP = new Map(TAILOR_NAMES.map((name) => [name.toLowerCase(), name]));
 
 const PROMPT_OCR = `Extract exact text data from this order slip image. 
 Act as a high-precision OCR engine with ADVANCED SIZE AND QUANTITY DETECTION.
@@ -328,6 +327,8 @@ KUALITAS DETEKSI:
 - PRIORITAS TINGGI: Cari di POJOK KANAN ATAS dokumen — biasanya angka besar dalam lingkaran atau kotak. Jika angka di pojok kanan atas bukan tepat 4 digit, set kodeBarang ke string kosong "".
 - Untuk CELANA: Size harus angka (28-40), bukan huruf (S/M/L).
 - Untuk KEMEJA: Deteksi jenis bahan (Maryland, Drill, Oxford, dll) dari deskripsi.
+- COLOR WORK ITEMS: Read colors from Deskripsi Pekerjaan, Jumlah Pesanan, and every size table header. Repeat the correct warna on every sizeDetails item. Never merge different colors.
+- TAILOR WORK ITEMS: For official tailor names, set namaPenjahit. For another handwritten name beside a non-custom size, set candidateTailorName and tailorConfirmationStatus to "needs_confirmation". Never merge different tailor names.
 
 Return ONLY a valid JSON object matching the schema.`;
 
@@ -345,20 +346,11 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
-const normalizeTailorName = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
+const getCandidateTailorName = (value: unknown, isCustomSize?: boolean): string | undefined => {
+  if (isCustomSize || typeof value !== 'string') return undefined;
   const cleaned = value.trim();
-  if (!cleaned) return undefined;
-
-  const exactMatch = TAILOR_NAME_LOOKUP.get(cleaned.toLowerCase());
-  if (exactMatch) return exactMatch;
-
-  for (const [lowerName, canonicalName] of TAILOR_NAME_LOOKUP.entries()) {
-    const pattern = new RegExp(`\\b${lowerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    if (pattern.test(cleaned)) return canonicalName;
-  }
-
-  return undefined;
+  if (!cleaned || normalizeTailorName(cleaned)) return undefined;
+  return /^[A-Za-z][A-Za-z .'-]{2,30}$/.test(cleaned) ? cleaned : undefined;
 };
 
 const extractKodeBarangFromText = (value: unknown): string | null => {
@@ -523,6 +515,10 @@ const processResult = (result: any) => {
         let gender = item.gender || 'Pria';
         const gLower = gender.toLowerCase().trim();
         const itemTailorName = normalizeTailorName(item.namaPenjahit) || normalizeTailorName(item.namaPerSize);
+        const itemCandidateTailorName =
+          getCandidateTailorName(item.candidateTailorName, item.isCustomSize) ||
+          getCandidateTailorName(item.namaPenjahit, item.isCustomSize) ||
+          getCandidateTailorName(item.namaPerSize, item.isCustomSize);
         // P = Pria (Laki-laki), W = Wanita (Perempuan)
         if (gLower === 'w' || gLower.includes('wanita') || gLower.includes('perempuan') || gLower === 'cewek') {
           gender = 'Wanita';
@@ -550,6 +546,17 @@ const processResult = (result: any) => {
               if (normalizeTailorName(sizeItem.namaPerSize)) {
                 delete sizeItem.namaPerSize;
               }
+            } else {
+              const candidateTailorName =
+                getCandidateTailorName(sizeItem.candidateTailorName, sizeItem.isCustomSize) ||
+                getCandidateTailorName(sizeItem.namaPenjahit, sizeItem.isCustomSize) ||
+                getCandidateTailorName(sizeItem.namaPerSize, sizeItem.isCustomSize);
+              if (candidateTailorName) {
+                sizeItem.candidateTailorName = candidateTailorName;
+                sizeItem.tailorConfirmationStatus = 'needs_confirmation';
+                delete sizeItem.namaPerSize;
+                delete sizeItem.namaPenjahit;
+              }
             }
             return sizeItem;
           });
@@ -561,6 +568,12 @@ const processResult = (result: any) => {
           gender,
           warna: item.warna || result.warna || '',
           namaPenjahit: itemTailorName,
+          candidateTailorName: itemTailorName ? undefined : itemCandidateTailorName,
+          tailorConfirmationStatus: itemTailorName
+            ? 'confirmed'
+            : itemCandidateTailorName
+              ? 'needs_confirmation'
+              : item.tailorConfirmationStatus,
         };
 
         // Hanya tambahkan field yang relevan berdasarkan jenis barang

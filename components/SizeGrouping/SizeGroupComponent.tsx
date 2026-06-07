@@ -53,10 +53,26 @@ const SizeGroupComponent: React.FC<SizeGroupComponentProps> = ({
         tangan={group.tangan}
         modelCelana={group.modelCelana}
         modelRompi={group.modelRompi}
+        warna={group.warna}
+        namaPenjahit={group.namaPenjahit}
+        candidateTailorName={group.candidateTailorName}
+        tailorConfirmationStatus={group.tailorConfirmationStatus}
         onGenderChange={(v) => handleCategoryChange('gender', v)}
         onTanganChange={(v) => handleCategoryChange('tangan', v)}
         onModelCelanaChange={(v) => handleCategoryChange('modelCelana', v)}
         onModelRompiChange={(v) => handleCategoryChange('modelRompi', v)}
+        onWarnaChange={(v) => handleCategoryChange('warna', v)}
+        onNamaPenjahitChange={(v) => onUpdateGroup({
+          ...group,
+          namaPenjahit: v || undefined,
+          candidateTailorName: v ? undefined : group.candidateTailorName,
+          tailorConfirmationStatus: v ? 'confirmed' : group.tailorConfirmationStatus,
+        })}
+        onMarkCandidateNotTailor={() => onUpdateGroup({
+          ...group,
+          candidateTailorName: undefined,
+          tailorConfirmationStatus: 'not_tailor',
+        })}
         isDarkMode={isDarkMode}
       />
 

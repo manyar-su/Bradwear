@@ -7,6 +7,7 @@ import { id as idLocale } from 'date-fns/locale/id';
 import { extractOrderData } from './services/geminiService';
 import { syncService } from './services/syncService';
 import { notificationService } from './services/notificationService';
+import { normalizeTailorName } from './utils/tailors';
 import { X, Camera, AlertTriangle, AlertCircle, Info, LogOut, ChevronRight, Loader2, Sparkles, FileText, Upload, Keyboard } from 'lucide-react';
 
 // Lazy loading screens for performance
@@ -56,16 +57,6 @@ const isValidDate = (date: any): date is Date => {
   return date instanceof Date && !isNaN(date.getTime());
 };
 
-const TAILOR_NAMES = ["Maris", "Ferry", "Aan", "Farid", "Opik", "Fadil", "Asep", "Abdul", "Hadi", "Epul"];
-const TAILOR_NAME_SET = new Set(TAILOR_NAMES.map((name) => name.toLowerCase()));
-
-const normalizeTailorName = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const cleaned = value.trim();
-  if (!cleaned) return undefined;
-  return TAILOR_NAMES.find((name) => name.toLowerCase() === cleaned.toLowerCase());
-};
-
 const flattenExtractedSizeDetails = (sizeDetails: any[] = []) => {
   const flattened: any[] = [];
 
@@ -84,6 +75,8 @@ const flattenExtractedSizeDetails = (sizeDetails: any[] = []) => {
           ...sizeItem,
           sizes: undefined,
           namaPenjahit: nestedTailor || detail.namaPenjahit || '',
+          candidateTailorName: sizeItem?.candidateTailorName || detail.candidateTailorName,
+          tailorConfirmationStatus: nestedTailor ? 'confirmed' : sizeItem?.tailorConfirmationStatus || detail.tailorConfirmationStatus,
           namaPerSize: nestedTailor && normalizeTailorName(sizeItem?.namaPerSize) ? undefined : sizeItem?.namaPerSize,
         });
       });
@@ -94,6 +87,8 @@ const flattenExtractedSizeDetails = (sizeDetails: any[] = []) => {
     flattened.push({
       ...detail,
       namaPenjahit: directTailor || detail.namaPenjahit || '',
+      candidateTailorName: detail.candidateTailorName,
+      tailorConfirmationStatus: directTailor ? 'confirmed' : detail.tailorConfirmationStatus,
       namaPerSize: directTailor && normalizeTailorName(detail.namaPerSize) ? undefined : detail.namaPerSize,
     });
   });
@@ -187,7 +182,7 @@ const App: React.FC = () => {
           const deduped = Array.from(dedupedMap.values());
           setOrders(deduped.map(o => ({
             ...o,
-            status: o.status || JobStatus.PROSES,
+            status: o.status === 'Beres' ? JobStatus.BERES : o.status || JobStatus.PROSES,
             createdAt: o.createdAt || new Date().toISOString()
           })));
         }
@@ -224,6 +219,7 @@ const App: React.FC = () => {
       setIsOffline(false);
       addNotification('Online Kembali', 'Mulai sinkronisasi data ke cloud...', 'info');
       syncLocalData();
+      syncService.flushOutbox().catch(e => console.error('Outbox sync failed:', e));
     };
     const handleOffline = () => {
       setIsOffline(true);
@@ -251,6 +247,15 @@ const App: React.FC = () => {
     };
     
     syncLocalData();
+    syncService.flushOutbox()
+      .then(() => syncService.getGlobalOrders())
+      .then(cloudOrders => {
+        setOrders(prev => {
+          const pendingLocal = prev.filter(order => !order.cloudId);
+          return [...pendingLocal, ...cloudOrders];
+        });
+      })
+      .catch(e => console.error('Initial cloud hydrate failed:', e));
 
     notificationService.init().catch(e => console.log('Notification init skipped:', e));
 
@@ -288,12 +293,12 @@ const App: React.FC = () => {
         );
         if (localOrder) {
           return prev.map(o => o.id === localOrder.id
-            ? { ...o, cloudId: o.cloudId || order.cloudId || order.id }
+            ? { ...order, id: o.id, cloudId: order.cloudId || order.id }
             : o
           );
         }
         // Order dari user lain — tidak ditambahkan ke history lokal
-        return prev;
+        return [order, ...prev];
       });
     });
 
@@ -446,26 +451,15 @@ const App: React.FC = () => {
 
       if (extracted) {
         let finalSizeDetails = flattenExtractedSizeDetails(extracted.sizeDetails || []);
-        const anyTailorMentioned = finalSizeDetails.some((sd: any) => {
-          const tailorName = typeof sd.namaPenjahit === 'string' ? sd.namaPenjahit.toLowerCase().trim() : '';
-          return !!tailorName && TAILOR_NAME_SET.has(tailorName);
-        });
-
-        if (anyTailorMentioned && profileName) {
-          // Ada nama penjahit di rekapan — ambil hanya yang cocok dengan user login
-          // Size tanpa nama penjahit (kosong) tetap diambil
-          const filtered = finalSizeDetails.filter((sd: any) =>
-            !sd.namaPenjahit || sd.namaPenjahit.trim() === '' ||
-            sd.namaPenjahit.toLowerCase().trim() === profileName.toLowerCase().trim()
-          );
-          // Kalau ada yang cocok, pakai yang filtered. Kalau tidak ada sama sekali, ambil semua (fallback)
-          finalSizeDetails = filtered.length > 0 ? filtered : finalSizeDetails;
-        }
-
-        // Assign namaPenjahit ke profileName untuk semua size yang lolos filter
+        // Preserve every detected work item. Only unassigned rows default to the scanner.
         finalSizeDetails = finalSizeDetails.map((sd: any) => ({
           ...sd,
-          namaPenjahit: sd.namaPenjahit || profileName || ''
+          namaPenjahit: sd.namaPenjahit || (sd.candidateTailorName ? '' : profileName || ''),
+          tailorConfirmationStatus: sd.namaPenjahit
+            ? 'confirmed'
+            : sd.candidateTailorName
+              ? 'needs_confirmation'
+              : 'confirmed'
         }));
 
         const savedCharts = localStorage.getItem('bradwear_size_charts');
@@ -505,6 +499,8 @@ const App: React.FC = () => {
             (m.warna || '') === (item.warna || '') &&
             (m.model || '') === (item.model || '') &&
             (m.namaPenjahit || '') === (item.namaPenjahit || '') &&
+            (m.candidateTailorName || '') === (item.candidateTailorName || '') &&
+            (m.tailorConfirmationStatus || '') === (item.tailorConfirmationStatus || '') &&
             (m.namaPerSize || '') === (item.namaPerSize || '') &&
             m.isCustomSize === item.isCustomSize &&
             JSON.stringify(m.customMeasurements || {}) === JSON.stringify(item.customMeasurements || {})
@@ -531,6 +527,8 @@ const App: React.FC = () => {
           sizeDetails: finalSizeDetails,
           jumlahPesanan: finalSizeDetails.reduce((sum, sd) => sum + (sd.jumlah || 0), 0),
           namaPenjahit: profileName,
+          source: 'scan',
+          scanPayload: extracted,
           id: Math.random().toString(36).substr(2, 9),
           createdAt: new Date().toISOString(),
           status: JobStatus.PROSES,
@@ -667,21 +665,22 @@ const App: React.FC = () => {
     addNotification('Data Terhapus', `${ids.length} data dihapus permanen`, 'danger');
   };
 
-  const handleUpdateStatus = (id: string, newStatus: JobStatus) => {
-    setOrders(orders.map(o => {
-      if (o.id === id || (o.cloudId && o.cloudId === id)) {
-        const updated = { 
-          ...o, 
-          status: newStatus, 
-          completedAt: newStatus === JobStatus.BERES ? new Date().toISOString() : null,
-          // PERBAIKAN: Hapus deletedAt saat item di-restore (status berubah ke PROSES)
-          deletedAt: newStatus === JobStatus.PROSES ? null : o.deletedAt
-        };
-        syncService.pushOrderToCloud(updated).catch(e => console.error('Status Sync failed:', e));
-        return updated;
-      }
-      return o;
-    }));
+  const handleUpdateStatus = async (id: string, newStatus: JobStatus) => {
+    const previous = orders.find(o => o.id === id || o.cloudId === id);
+    if (!previous) return;
+    const updated = {
+      ...previous,
+      status: newStatus,
+      completedAt: newStatus === JobStatus.BERES ? new Date().toISOString() : null,
+      deletedAt: newStatus === JobStatus.PROSES ? null : previous.deletedAt
+    };
+    setOrders(prev => prev.map(o => o.id === previous.id ? updated : o));
+
+    const synced = await syncService.updateOrderStatus(updated, newStatus);
+    if (!synced && navigator.onLine) {
+      setOrders(prev => prev.map(o => o.id === previous.id ? previous : o));
+      addNotification('Status Gagal Disimpan', `Status order #${previous.kodeBarang} dikembalikan karena Supabase menolak perubahan.`, 'danger');
+    }
   };
 
   const handleBulkUpdateStatus = (ids: string[], newStatus: JobStatus, newPaymentStatus?: PaymentStatus) => {
@@ -695,7 +694,7 @@ const App: React.FC = () => {
           deletedAt: newStatus === JobStatus.PROSES ? null : o.deletedAt,
           paymentStatus: newPaymentStatus !== undefined ? newPaymentStatus : o.paymentStatus
         };
-        syncService.pushOrderToCloud(updated).catch(e => console.error('Bulk Status Sync failed:', e));
+        syncService.updateOrderStatus(updated, newStatus).catch(e => console.error('Bulk Status Sync failed:', e));
         return updated;
       }
       return o;

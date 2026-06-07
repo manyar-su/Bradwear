@@ -8,6 +8,10 @@
     "build": "vite build",
     "test": "vitest run --globals",
     "preview": "vite preview",
+    "vercel:status": "node scripts/vercel-guard.mjs status",
+    "vercel:switch": "node scripts/vercel-guard.mjs switch",
+    "vercel:deploy": "node scripts/vercel-guard.mjs deploy",
+    "vercel:deploy:prod": "node scripts/vercel-guard.mjs deploy --prod",
     "cap:sync": "npx cap sync",
     "android:open": "npx cap open android",
     "verify": "tsx utils/sizeGrouping.verify.ts"

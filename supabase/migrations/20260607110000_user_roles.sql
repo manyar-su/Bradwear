@@ -26,19 +26,28 @@ execute function public.set_updated_at_user_roles();
 
 alter table public.user_roles enable row level security;
 
+create or replace function public.is_admin_or_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_roles
+    where user_id = auth.uid()
+      and is_active = true
+      and role in ('admin', 'staff')
+  );
+$$;
+
 drop policy if exists "user_roles_select_own_or_admin_staff" on public.user_roles;
 create policy "user_roles_select_own_or_admin_staff"
 on public.user_roles
 for select
 using (
   auth.uid() = user_id
-  or exists (
-    select 1
-    from public.user_roles ur
-    where ur.user_id = auth.uid()
-      and ur.is_active = true
-      and ur.role in ('admin', 'staff')
-  )
+  or public.is_admin_or_staff()
 );
 
 drop policy if exists "user_roles_admin_staff_insert" on public.user_roles;
@@ -46,13 +55,7 @@ create policy "user_roles_admin_staff_insert"
 on public.user_roles
 for insert
 with check (
-  exists (
-    select 1
-    from public.user_roles ur
-    where ur.user_id = auth.uid()
-      and ur.is_active = true
-      and ur.role in ('admin', 'staff')
-  )
+  public.is_admin_or_staff()
 );
 
 drop policy if exists "user_roles_admin_staff_update" on public.user_roles;
@@ -60,22 +63,10 @@ create policy "user_roles_admin_staff_update"
 on public.user_roles
 for update
 using (
-  exists (
-    select 1
-    from public.user_roles ur
-    where ur.user_id = auth.uid()
-      and ur.is_active = true
-      and ur.role in ('admin', 'staff')
-  )
+  public.is_admin_or_staff()
 )
 with check (
-  exists (
-    select 1
-    from public.user_roles ur
-    where ur.user_id = auth.uid()
-      and ur.is_active = true
-      and ur.role in ('admin', 'staff')
-  )
+  public.is_admin_or_staff()
 );
 
 drop policy if exists "user_roles_admin_staff_delete" on public.user_roles;
@@ -83,13 +74,7 @@ create policy "user_roles_admin_staff_delete"
 on public.user_roles
 for delete
 using (
-  exists (
-    select 1
-    from public.user_roles ur
-    where ur.user_id = auth.uid()
-      and ur.is_active = true
-      and ur.role in ('admin', 'staff')
-  )
+  public.is_admin_or_staff()
 );
 
 create or replace function public.handle_new_auth_user_role()

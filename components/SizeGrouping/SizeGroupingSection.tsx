@@ -14,6 +14,7 @@ interface SizeGroupingSectionProps {
   sizeDetails: SizeDetail[];
   onSizeDetailsChange: (sizeDetails: SizeDetail[]) => void;
   isDarkMode: boolean;
+  defaultWarna?: string;
 }
 
 const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
@@ -21,6 +22,7 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
   sizeDetails,
   onSizeDetailsChange,
   isDarkMode,
+  defaultWarna,
 }) => {
   const [sizeGroups, setSizeGroups] = useState<SizeGroup[]>([]);
   const isInternalUpdate = React.useRef(false);
@@ -44,6 +46,9 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
           tangan: 'Pendek',
           modelCelana: ModelCelana.WARRIOR,
           modelRompi: ModelRompi.BUPATI,
+          warna: defaultWarna,
+          namaPenjahit: localStorage.getItem('profileName') || undefined,
+          tailorConfirmationStatus: 'confirmed',
           sizes: [
             {
               id: `size-${Date.now()}`,
@@ -65,6 +70,9 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
         tangan: 'Pendek',
         modelCelana: ModelCelana.WARRIOR,
         modelRompi: ModelRompi.BUPATI,
+        warna: defaultWarna,
+        namaPenjahit: localStorage.getItem('profileName') || undefined,
+        tailorConfirmationStatus: 'confirmed',
         sizes: [
           {
             id: `size-${Date.now()}`,
@@ -75,7 +83,7 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
       };
       setSizeGroups([defaultGroup]);
     }
-  }, [sizeDetails, jenisBarang]);
+  }, [sizeDetails, jenisBarang, defaultWarna]);
 
   // Update parent when groups change internally
   const updateParent = React.useCallback((newGroups: SizeGroup[]) => {
@@ -113,6 +121,9 @@ const SizeGroupingSection: React.FC<SizeGroupingSectionProps> = ({
       tangan: 'Pendek',
       modelCelana: ModelCelana.WARRIOR,
       modelRompi: ModelRompi.BUPATI,
+      warna: defaultWarna,
+      namaPenjahit: localStorage.getItem('profileName') || undefined,
+      tailorConfirmationStatus: 'confirmed',
       sizes: [
         {
           id: `size-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

@@ -264,7 +264,7 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ orders, isDarkMode, c
         <div className="flex justify-between items-center mb-6 px-2">
           <div className="flex flex-col">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Detail Produksi Harian</h4>
-            <span className="text-[8px] font-bold text-emerald-500 uppercase mt-1">Berdasarkan Jumlah Pcs Beres</span>
+            <span className="text-[8px] font-bold text-emerald-500 uppercase mt-1">Berdasarkan Jumlah Pcs Selesai</span>
           </div>
           <div className="p-2 bg-emerald-500/10 rounded-xl">
             <TrendingUp size={16} className="text-emerald-500" />

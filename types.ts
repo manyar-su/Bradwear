@@ -13,7 +13,7 @@ export enum SakuType {
 }
 
 export enum JobStatus {
-  BERES = 'Beres',
+  BERES = 'Selesai',
   PROSES = 'Proses'
 }
 
@@ -94,6 +94,9 @@ export interface SizeDetail {
   gender: 'Pria' | 'Wanita';
   tangan: 'Panjang' | 'Pendek';
   namaPerSize?: string;
+  namaPenjahit?: string;
+  candidateTailorName?: string;
+  tailorConfirmationStatus?: 'confirmed' | 'needs_confirmation' | 'not_tailor';
   isCustomSize?: boolean;
   customMeasurements?: CustomMeasurements;
   warna?: string;
@@ -128,6 +131,9 @@ export interface SizeGroup {
   modelRompi?: ModelRompi;
   // Shared attributes across all sizes in group
   warna?: string;
+  namaPenjahit?: string;
+  candidateTailorName?: string;
+  tailorConfirmationStatus?: 'confirmed' | 'needs_confirmation' | 'not_tailor';
   model?: string; // For KEMEJA
   sakuType?: SakuType;
   sakuColor?: SakuColor;
@@ -189,6 +195,10 @@ export interface OrderItem {
   modelDetail?: string;
   paymentStatus?: PaymentStatus;
   cloudId?: string;
+  ownerUserId?: string;
+  source?: 'scan' | 'manual' | 'migration';
+  scanPayload?: Record<string, unknown>;
+  updatedAt?: string;
   jenisBarang?: JenisBarang;
   bahanKemeja?: BahanKemeja;
 }

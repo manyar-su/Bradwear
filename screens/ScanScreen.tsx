@@ -63,6 +63,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const [duplicateOwner, setDuplicateOwner] = useState<string | null>(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedSizeChart, setSelectedSizeChart] = useState<string | null>(null);
   const [availableSizeCharts, setAvailableSizeCharts] = useState<SizeChart[]>([]);
   const [showSizeChartPicker, setShowSizeChartPicker] = useState<number | null>(null);
@@ -75,6 +76,10 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionPreview = (formData.deskripsiPekerjaan || '').trim();
+  const descriptionSnippet = descriptionPreview.length > 180
+    ? `${descriptionPreview.slice(0, 180).trim()}...`
+    : descriptionPreview;
 
   // Helper function to get custom measurement fields based on jenis barang
   const getCustomMeasurementFields = (jenisBarang?: JenisBarang) => {
@@ -550,6 +555,18 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const unresolvedTailor = formData.sizeDetails?.find(
+      detail => detail.candidateTailorName && detail.tailorConfirmationStatus === 'needs_confirmation'
+    );
+    if (unresolvedTailor) {
+      triggerConfirm({
+        title: 'Konfirmasi Penjahit',
+        message: `Nama "${unresolvedTailor.candidateTailorName}" belum dikonfirmasi. Pilih penjahit resmi atau tandai sebagai bukan penjahit.`,
+        type: 'warning',
+        onConfirm: () => { }
+      });
+      return;
+    }
     if (!formData.namaPenjahit || !formData.kodeBarang) {
       if (!formData.kodeBarang) {
         setKodeBarangError(true);
@@ -865,6 +882,33 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                 </div>
               </div>
 
+              {descriptionPreview && (
+                <div className={`p-8 rounded-[3rem] shadow-xl border space-y-5 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                  <div className="flex items-center justify-between gap-4 px-2">
+                    <div className="space-y-1">
+                      <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 tracking-[0.2em]">
+                        <Info size={14} /> Deskripsi Pekerjaan Scan
+                      </h3>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Ditampilkan dari hasil pembacaan nota
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDescriptionModal(true)}
+                      className="shrink-0 rounded-2xl border border-[#10b981]/20 bg-[#10b981]/10 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#10b981] transition-all hover:brightness-95"
+                    >
+                      Buka Detail
+                    </button>
+                  </div>
+                  <div className={`rounded-[2rem] border px-6 py-5 ${isDarkMode ? 'border-slate-800 bg-slate-950 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700 shadow-inner'}`}>
+                    <p className="text-xs font-bold leading-6 whitespace-pre-wrap">
+                      {descriptionSnippet}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                 <div className="flex justify-between items-center mb-2 px-2">
                   <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">Rincian Kerja</h3>
@@ -877,6 +921,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
 
                 <SizeGroupingSection
                   jenisBarang={formData.jenisBarang}
+                  defaultWarna={formData.warna}
                   sizeDetails={formData.sizeDetails || []}
                   onSizeDetailsChange={(newSizeDetails) => {
                     setFormData({ ...formData, sizeDetails: newSizeDetails });
@@ -934,6 +979,36 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
             </div>
           )}
         </form>
+      )}
+
+      {showDescriptionModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 px-5" onClick={() => setShowDescriptionModal(false)}>
+          <div
+            className={`w-full max-w-2xl rounded-[2.5rem] border p-8 shadow-2xl ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-100 text-slate-800'}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Deskripsi Pekerjaan</h3>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Hasil scan nota untuk acuan rincian kerja
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDescriptionModal(false)}
+                className={`rounded-2xl px-4 py-2 text-[10px] font-black uppercase tracking-widest ${isDarkMode ? 'bg-slate-950 text-slate-300 border border-slate-800' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}
+              >
+                Tutup
+              </button>
+            </div>
+            <div className={`mt-6 max-h-[65vh] overflow-y-auto rounded-[2rem] border px-6 py-5 ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50 shadow-inner'}`}>
+              <p className="text-sm font-bold leading-7 whitespace-pre-wrap">
+                {descriptionPreview}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
