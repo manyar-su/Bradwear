@@ -8,6 +8,7 @@
     "build": "vite build",
     "test": "vitest run --globals",
     "preview": "vite preview",
+    "supabase:migrate-project": "node scripts/migrate-supabase-project.mjs",
     "vercel:status": "node scripts/vercel-guard.mjs status",
     "vercel:switch": "node scripts/vercel-guard.mjs switch",
     "vercel:deploy": "node scripts/vercel-guard.mjs deploy",

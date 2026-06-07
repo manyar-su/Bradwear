@@ -214,7 +214,7 @@ const Calendar3D = ({ orders, isDarkMode }: { orders: OrderItem[], isDarkMode: b
   };
 
   return (
-    <div className={`w-full max-w-sm p-6 rounded-[2.5rem] border shadow-2xl relative overflow-hidden transition-all duration-500 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`} style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}>
+    <div className={`w-full p-6 rounded-[2.5rem] border shadow-2xl relative overflow-hidden transition-all duration-500 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`} style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}>
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl ${isDarkMode ? 'bg-slate-900' : 'bg-emerald-50'}`}>
@@ -865,7 +865,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
         </div>
 
-        <div className={`w-full max-sm p-6 rounded-[2.5rem] border shadow-lg relative overflow-hidden animate-in slide-in-from-bottom-4 duration-700 delay-200 ${isDarkMode ? 'bg-slate-900 border-emerald-500/20 shadow-emerald-500/5' : 'bg-white border-slate-100'}`}>
+        <div className={`w-full p-6 rounded-[2.5rem] border shadow-lg relative overflow-hidden animate-in slide-in-from-bottom-4 duration-700 delay-200 ${isDarkMode ? 'bg-slate-900 border-emerald-500/20 shadow-emerald-500/5' : 'bg-white border-slate-100'}`}>
           <div className="relative z-10">
             <div className="flex justify-between items-center mb-6">
               <div className={`p-3 rounded-2xl ${isDarkMode ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
