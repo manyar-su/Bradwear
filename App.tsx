@@ -166,6 +166,8 @@ const App: React.FC = () => {
   const globalFileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
   const lastSaveRef = useRef<string>('');
+  const lastNotificationKeyRef = useRef<string>('');
+  const lastNotificationAtRef = useRef(0);
 
   const [globalNotification, setGlobalNotification] = useState<{ sender: string, kode: string, type?: 'ADD' | 'DELETE' } | null>(null);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
@@ -204,10 +206,25 @@ const App: React.FC = () => {
   useEffect(() => {
     const showGlobalNotification = (notif: { sender: string; kode: string; type?: 'ADD' | 'DELETE' }) => {
       const profileName = getActiveProfileName();
-      if (notif.sender !== profileName) {
-        setGlobalNotification(notif);
-        setTimeout(() => setGlobalNotification(null), 5000);
+      if (!notif.sender || matchTailorIdentity(notif.sender, profileName)) return;
+
+      const notificationKey = `${notif.type || 'ADD'}:${notif.sender}:${notif.kode}`;
+      const now = Date.now();
+      if (lastNotificationKeyRef.current === notificationKey && now - lastNotificationAtRef.current < 4000) {
+        return;
       }
+
+      lastNotificationKeyRef.current = notificationKey;
+      lastNotificationAtRef.current = now;
+      setGlobalNotification(notif);
+      addNotification(
+        notif.type === 'DELETE' ? 'Order Dihapus Pengguna Lain' : 'Kode Barang Baru',
+        notif.type === 'DELETE'
+          ? `${notif.sender} menghapus kode #${notif.kode}`
+          : `${notif.sender} menyimpan kode barang #${notif.kode}`,
+        notif.type === 'DELETE' ? 'warning' : 'success'
+      );
+      setTimeout(() => setGlobalNotification(null), 5000);
     };
 
     const saved = localStorage.getItem('tailor_orders');
@@ -336,6 +353,10 @@ const App: React.FC = () => {
     // Supabase realtime: HANYA update cloudId jika order sudah ada di local
     // TIDAK inject order baru dari cloud ke state (mencegah duplikat)
     const orderSubscription = syncService.subscribeToGlobalOrders((order, event) => {
+      if (event === 'INSERT' && order.namaPenjahit && order.kodeBarang) {
+        showGlobalNotification({ sender: order.namaPenjahit, kode: order.kodeBarang, type: 'ADD' });
+      }
+
       setOrders(prev => {
         if (event === 'DELETE') {
           return prev.filter(o => o.id !== order.id && o.cloudId !== order.id);
@@ -877,16 +898,57 @@ const App: React.FC = () => {
 
       {isScanning && (
         <div className="fixed inset-0 z-[500] flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="relative mb-8">
-            <Loader2 className="animate-spin text-[#10b981]" size={72} strokeWidth={3} />
-            <div className="absolute inset-0 bg-[#10b981] blur-3xl opacity-20 animate-pulse" />
+          <div className="relative mb-8 flex flex-col items-center">
+            <div className="relative h-52 w-52 [perspective:1400px]">
+              <div className="absolute inset-0 rounded-[2.75rem] border border-emerald-400/15 bg-emerald-500/5 shadow-[0_0_80px_rgba(16,185,129,0.18)] [transform-style:preserve-3d] animate-[scanFloat_4s_ease-in-out_infinite]" />
+              <div className="absolute inset-5 rounded-[2.25rem] border border-emerald-400/30 [transform:rotateX(72deg)_rotateZ(0deg)] animate-[scanOrbitA_2.4s_linear_infinite]" />
+              <div className="absolute inset-7 rounded-[2rem] border border-cyan-300/35 [transform:rotateY(72deg)_rotateZ(0deg)] animate-[scanOrbitB_2.9s_linear_infinite]" />
+              <div className="absolute inset-10 rounded-[1.75rem] border border-white/15 [transform:rotateX(72deg)_rotateY(25deg)_rotateZ(0deg)] animate-[scanOrbitC_3.6s_linear_infinite]" />
+              <div className="absolute inset-[3.65rem] rounded-[1.5rem] border-4 border-emerald-400/80 border-t-transparent border-r-cyan-300/20 animate-[spin_1.15s_linear_infinite]" />
+              <div className="absolute inset-[4.9rem] rounded-[1.25rem] bg-slate-950/75 border border-emerald-300/30 backdrop-blur-xl shadow-[0_0_35px_rgba(16,185,129,0.25)] flex flex-col items-center justify-center [transform:translateZ(32px)]">
+                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-400 shadow-[0_12px_30px_rgba(45,212,191,0.35)] animate-[scanCorePulse_1.8s_ease-in-out_infinite]" />
+                <div className="mt-3 flex gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-300 animate-[scanBlink_1s_ease-in-out_infinite]" />
+                  <span className="h-2 w-2 rounded-full bg-teal-300 animate-[scanBlink_1s_ease-in-out_0.15s_infinite]" />
+                  <span className="h-2 w-2 rounded-full bg-cyan-300 animate-[scanBlink_1s_ease-in-out_0.3s_infinite]" />
+                </div>
+              </div>
+            </div>
+            <div className="absolute inset-0 top-auto bottom-6 h-24 w-24 rounded-full bg-emerald-500/20 blur-3xl animate-pulse" />
           </div>
           <div className="text-center space-y-3 max-w-xs">
             <h2 className="text-white text-xl font-black uppercase tracking-tight">AI Processing</h2>
-            <p className="text-[#10b981] font-black text-sm leading-tight animate-pulse h-12 flex items-center justify-center">{loadingText}</p>
+            <p className="text-[#10b981] font-black text-sm leading-tight h-12 flex items-center justify-center">{loadingText}</p>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest pt-4 opacity-50">Mohon tunggu sebentar...</p>
             <button onClick={handleCancelScan} className="mt-10 px-8 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">Batal Scan</button>
           </div>
+          <style>{`
+            @keyframes scanOrbitA {
+              0% { transform: rotateX(72deg) rotateZ(0deg); }
+              100% { transform: rotateX(72deg) rotateZ(360deg); }
+            }
+            @keyframes scanOrbitB {
+              0% { transform: rotateY(72deg) rotateZ(360deg); }
+              100% { transform: rotateY(72deg) rotateZ(0deg); }
+            }
+            @keyframes scanOrbitC {
+              0% { transform: rotateX(72deg) rotateY(25deg) rotateZ(0deg) scale(0.92); }
+              50% { transform: rotateX(72deg) rotateY(25deg) rotateZ(180deg) scale(1); }
+              100% { transform: rotateX(72deg) rotateY(25deg) rotateZ(360deg) scale(0.92); }
+            }
+            @keyframes scanCorePulse {
+              0%, 100% { transform: scale(0.88); box-shadow: 0 0 0 rgba(45,212,191,0.12); }
+              50% { transform: scale(1.12); box-shadow: 0 0 30px rgba(45,212,191,0.4); }
+            }
+            @keyframes scanFloat {
+              0%, 100% { transform: translateY(0px) rotateX(0deg); }
+              50% { transform: translateY(-10px) rotateX(6deg); }
+            }
+            @keyframes scanBlink {
+              0%, 100% { opacity: 0.35; transform: translateY(0); }
+              50% { opacity: 1; transform: translateY(-3px); }
+            }
+          `}</style>
         </div>
       )}
 

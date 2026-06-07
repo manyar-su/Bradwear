@@ -294,6 +294,7 @@ const Calendar3D = ({ orders, isDarkMode }: { orders: OrderItem[], isDarkMode: b
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQuery, isDarkMode, onViewHistory, toggleDarkMode, onScanClick, onUpdateStatus, onUpdateOrder, onDelete, unreadCount = 0, onShowNotifications, triggerConfirm }) => {
+  const contentWidthClass = 'w-full max-w-3xl';
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -837,7 +838,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
 
       <div className="p-6 space-y-6 flex flex-col items-center">
         {/* Hero Section */}
-        <div className="w-full max-sm text-center mb-2 animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className={`${contentWidthClass} max-sm text-center mb-2 animate-in fade-in slide-in-from-top-4 duration-700`}>
           <h1 className={`text-2xl font-black tracking-tighter mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
             Halo, {localStorage.getItem('profileName') || 'Penjahit'}!
           </h1>
@@ -845,7 +846,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
         </div>
 
         {/* Dynamic Motivation Card */}
-        <div className={`w-full max-w-sm rounded-[2.5rem] p-8 relative overflow-hidden shadow-xl animate-in fade-in zoom-in duration-700 delay-100 ${new Date().getDay() % 3 === 0 ? 'bg-gradient-to-br from-indigo-600 to-purple-700' :
+        <div className={`${contentWidthClass} rounded-[2.5rem] p-8 relative overflow-hidden shadow-xl animate-in fade-in zoom-in duration-700 delay-100 ${new Date().getDay() % 3 === 0 ? 'bg-gradient-to-br from-indigo-600 to-purple-700' :
           new Date().getDay() % 3 === 1 ? 'bg-gradient-to-br from-emerald-600 to-teal-700' :
             'bg-gradient-to-br from-orange-500 to-pink-600'
           } text-white`}>
@@ -904,7 +905,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
 
         <Calendar3D orders={orders} isDarkMode={isDarkMode} />
 
-        <div className="w-full max-w-sm overflow-hidden relative py-1 rounded-full border border-dashed border-slate-300 animate-in fade-in duration-1000 delay-500">
+        <div className={`${contentWidthClass} overflow-hidden relative py-1 rounded-full border border-dashed border-slate-300 animate-in fade-in duration-1000 delay-500`}>
           <div className="flex animate-[marquee_25s_linear_infinite] whitespace-nowrap">
             <span className={`text-[10px] font-bold uppercase tracking-[0.2em] px-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               PANTAU PEKERJAAN • BRADWEAR FLOW • PENJAHIT PRODUCTION • SEMANGAT BEKERJA • QUALITY FIRST
@@ -912,7 +913,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           </div>
         </div>
 
-        <div className="w-full max-w-sm relative z-40 animate-in fade-in duration-700 delay-200">
+        <div className={`${contentWidthClass} relative z-40 animate-in fade-in duration-700 delay-200`}>
           <div className="relative group mb-3">
             <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${localSearch ? 'text-[#10b981]' : 'text-slate-400'}`} size={18} />
             <input
@@ -1083,7 +1084,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           )}
         </div>
 
-        <div className="w-full max-w-sm grid grid-cols-2 gap-4 animate-in slide-in-from-bottom-2 duration-700 delay-500">
+        <div className={`${contentWidthClass} grid grid-cols-2 gap-4 animate-in slide-in-from-bottom-2 duration-700 delay-500`}>
           <div className={`p-5 rounded-[2rem] border shadow-sm flex flex-col items-center text-center ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-50'}`}>
             <Package className="text-emerald-500 mb-2" size={20} />
             <p className="text-[8px] text-slate-400 font-black uppercase tracking-wider">Berjalan</p>
@@ -1096,7 +1097,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, searchQuery, setSearchQue
           </div>
         </div>
 
-        <div className="w-full max-w-sm space-y-8 animate-in slide-in-from-bottom-2 duration-700 delay-300">
+        <div className={`${contentWidthClass} space-y-8 animate-in slide-in-from-bottom-2 duration-700 delay-300`}>
           <div className="px-2">
             <h4 className="font-black text-[10px] uppercase text-slate-400 tracking-[0.2em] flex items-center gap-2 mb-4">
               <BellRing size={14} className="text-orange-500" /> Pengingat Target

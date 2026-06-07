@@ -57,7 +57,7 @@ const DailyMotivation: React.FC<DailyMotivationProps> = ({ isDarkMode }) => {
           stiffness: 200,
           damping: 20
         }}
-        className={`fixed top-20 left-0 right-0 z-50 mx-4 ${isDarkMode ? 'bg-gradient-to-r from-emerald-600 to-teal-600' : 'bg-gradient-to-r from-emerald-500 to-teal-500'} rounded-3xl shadow-2xl overflow-hidden`}
+        className={`fixed top-20 left-1/2 z-50 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 ${isDarkMode ? 'bg-gradient-to-r from-emerald-600 to-teal-600' : 'bg-gradient-to-r from-emerald-500 to-teal-500'} rounded-3xl shadow-2xl overflow-hidden`}
       >
         <div className="relative p-6">
           {/* Close Button */}
