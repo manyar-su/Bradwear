@@ -114,6 +114,39 @@ const getActiveProfileName = () => {
   return normalized;
 };
 
+const isSameOrderIdentity = (left: OrderItem, right: OrderItem) =>
+  left.id === right.id ||
+  left.id === right.cloudId ||
+  right.id === left.cloudId ||
+  ((left.cloudId && right.cloudId && left.cloudId === right.cloudId)) ||
+  (
+    left.kodeBarang === right.kodeBarang &&
+    ((left.namaPenjahit || '').trim().toLowerCase() === (right.namaPenjahit || '').trim().toLowerCase()) &&
+    Math.abs(new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime()) < 60000
+  );
+
+const mergeOrders = (localOrders: OrderItem[], cloudOrders: OrderItem[]) => {
+  const merged = [...localOrders];
+
+  cloudOrders.forEach((cloudOrder) => {
+    const existingIndex = merged.findIndex((localOrder) => isSameOrderIdentity(localOrder, cloudOrder));
+    if (existingIndex >= 0) {
+      const existing = merged[existingIndex];
+      merged[existingIndex] = {
+        ...existing,
+        ...cloudOrder,
+        id: existing.id || cloudOrder.id,
+        cloudId: cloudOrder.cloudId || cloudOrder.id || existing.cloudId,
+      };
+      return;
+    }
+
+    merged.push(cloudOrder);
+  });
+
+  return merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+};
+
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewState>('DASHBOARD');
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -454,6 +487,37 @@ const App: React.FC = () => {
     }
     return () => clearInterval(interval);
   }, [isScanning]);
+
+  useEffect(() => {
+    if (activeView !== 'HISTORY' || !navigator.onLine) return;
+
+    const activeTailorName = getActiveProfileName().trim();
+    let cancelled = false;
+
+    const refreshHistoryFromSupabase = async () => {
+      try {
+        const cloudOrders = await syncService.getGlobalOrders();
+        const filteredCloudOrders = activeTailorName && activeTailorName !== 'Nama Anda'
+          ? cloudOrders.filter(order => orderBelongsToTailor(order, activeTailorName))
+          : cloudOrders;
+
+        if (cancelled) return;
+
+        setOrders(prev => {
+          const pendingLocal = prev.filter(order => !order.cloudId && orderBelongsToTailor(order, activeTailorName));
+          return mergeOrders(pendingLocal, filteredCloudOrders);
+        });
+      } catch (error) {
+        console.error('History supabase refresh failed:', error);
+      }
+    };
+
+    refreshHistoryFromSupabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView]);
 
   const handleGlobalScan = async (base64: string) => {
     setIsScanning(true);

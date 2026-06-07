@@ -59,6 +59,22 @@ const getActiveProfileName = () =>
   localStorage.getItem('profileName') ||
   'Nama Anda';
 
+const DESCRIPTION_HIGHLIGHT_REGEX = /\b(lengan|saku)\b/gi;
+
+const renderHighlightedDescription = (text: string) =>
+  text.split(DESCRIPTION_HIGHLIGHT_REGEX).map((part, index) => (
+    DESCRIPTION_HIGHLIGHT_REGEX.test(part)
+      ? (
+        <span
+          key={`${part}-${index}`}
+          className="rounded-md bg-emerald-100 px-1.5 py-0.5 font-black text-emerald-700 shadow-sm"
+        >
+          {part}
+        </span>
+      )
+      : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+  ));
+
 const ScanScreen: React.FC<ScanScreenProps> = ({
   onSave, onCancel, isDarkMode, existingOrders = [],
   isScanningGlobal, scanResultGlobal, onStartScan, setScanResultGlobal, triggerConfirm
@@ -86,6 +102,11 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   const descriptionSnippet = descriptionPreview.length > 180
     ? `${descriptionPreview.slice(0, 180).trim()}...`
     : descriptionPreview;
+  const jenisBarangCards = [
+    { value: JenisBarang.KEMEJA, label: 'Kemeja', icon: Package, accent: 'from-emerald-500 to-teal-500' },
+    { value: JenisBarang.ROMPI, label: 'Rompi', icon: Layers, accent: 'from-sky-500 to-cyan-500' },
+    { value: JenisBarang.CELANA, label: 'Celana', icon: Ruler, accent: 'from-amber-500 to-orange-500' },
+  ] as const;
 
   // Helper function to get custom measurement fields based on jenis barang
   const getCustomMeasurementFields = (jenisBarang?: JenisBarang) => {
@@ -827,8 +848,8 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                 </div>
               )}
 
-              <div className={`p-6 md:p-7 rounded-[3rem] shadow-xl border space-y-4 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+              <div className={`p-5 md:p-6 rounded-[2.6rem] shadow-xl border space-y-4 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
                   <FormInput label="Penjahit (Otomatis)" value={formData.namaPenjahit} readOnly isDarkMode={isDarkMode} placeholder="Nama Penjahit" icon={<User size={14} className="text-emerald-500" />} className="opacity-70 bg-slate-100/50" compact />
 
                   <div ref={kodeBarangRef} className={`p-1 rounded-[2.5rem] border transition-all ${kodeBarangError ? 'animate-kode-error border-red-500 bg-red-50/30' : isDarkMode ? 'bg-amber-500/5 border-amber-200/50' : 'bg-amber-50/50 border-amber-200/50'}`}>
@@ -865,25 +886,45 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
               </div>
 
               {/* Pilihan Jenis Barang */}
-              <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 ml-2 tracking-[0.2em]">
+              <div className={`p-6 rounded-[2.8rem] shadow-xl border space-y-5 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] border-slate-100'}`}>
+                <div className="flex items-center justify-between px-1">
+                  <div className="space-y-1">
+                    <h3 className="text-[12px] font-black text-slate-400 uppercase flex items-center gap-2 tracking-[0.2em]">
                   <Package size={14} /> Jenis Barang
-                </h3>
+                    </h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pilih kategori kerja utama</p>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <Sparkles size={12} className="text-emerald-500" />
+                    Scan Smart
+                  </div>
+                </div>
                 <div className="grid grid-cols-3 gap-3">
-                  {Object.values(JenisBarang).map(jenis => (
+                  {jenisBarangCards.map(({ value, label, icon: Icon, accent }) => (
                     <button
-                      key={jenis}
+                      key={value}
                       type="button"
-                      onClick={() => setFormData({ ...formData, jenisBarang: jenis })}
-                      className={`py-5 rounded-2xl text-xs font-black uppercase transition-all ${
-                        formData.jenisBarang === jenis
-                          ? 'bg-[#10b981] text-white shadow-lg scale-[1.02]'
+                      onClick={() => setFormData({ ...formData, jenisBarang: value })}
+                      className={`group relative overflow-hidden rounded-[1.7rem] border px-3 py-4 text-xs font-black uppercase transition-all ${
+                        formData.jenisBarang === value
+                          ? `bg-gradient-to-br ${accent} text-white shadow-xl shadow-emerald-500/20 scale-[1.02] border-transparent`
                           : isDarkMode
-                          ? 'bg-slate-950 text-slate-400 border border-slate-800'
-                          : 'bg-slate-50 text-slate-400 border border-slate-200'
+                          ? 'bg-slate-950 text-slate-400 border-slate-800'
+                          : 'bg-white text-slate-500 border-slate-200 shadow-sm'
                       }`}
                     >
-                      {jenis}
+                      <div className="flex flex-col items-center gap-2">
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                          formData.jenisBarang === value
+                            ? 'bg-white/20 text-white'
+                            : isDarkMode
+                              ? 'bg-slate-900 text-slate-300'
+                              : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          <Icon size={18} />
+                        </div>
+                        <span className="text-[11px] tracking-wide">{label}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -910,7 +951,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                   </div>
                   <div className={`rounded-[2rem] border px-6 py-5 ${isDarkMode ? 'border-slate-800 bg-slate-950 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700 shadow-inner'}`}>
                     <p className="text-xs font-bold leading-6 whitespace-pre-wrap">
-                      {descriptionSnippet}
+                      {renderHighlightedDescription(descriptionSnippet)}
                     </p>
                   </div>
                 </div>
@@ -1011,7 +1052,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
             </div>
             <div className={`mt-6 max-h-[65vh] overflow-y-auto rounded-[2rem] border px-6 py-5 ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50 shadow-inner'}`}>
               <p className="text-sm font-bold leading-7 whitespace-pre-wrap">
-                {descriptionPreview}
+                {renderHighlightedDescription(descriptionPreview)}
               </p>
             </div>
           </div>
@@ -1030,7 +1071,7 @@ const FormInput = ({ label, type = 'text', value, onChange, required, isDarkMode
       <input
         type={type}
         readOnly={readOnly}
-        className={`border ${compact ? 'rounded-[1.4rem] px-5 py-3.5 text-[13px]' : 'rounded-2xl px-6 py-4 text-sm'} font-black transition-all outline-none focus:ring-4 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')} ${className}`}
+        className={`border ${compact ? 'rounded-[1.3rem] px-4 py-3 text-[12px] sm:text-[13px]' : 'rounded-2xl px-6 py-4 text-sm'} font-black transition-all outline-none focus:ring-4 min-w-0 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')} ${className}`}
         value={value || ''}
         onChange={e => !readOnly && onChange(e.target.value)}
         required={required}
