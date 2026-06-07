@@ -831,9 +831,9 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                 </div>
               )}
 
-              <div className={`p-8 rounded-[3rem] shadow-xl border space-y-6 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <div className="grid grid-cols-1 gap-6">
-                  <FormInput label="Penjahit (Otomatis)" value={formData.namaPenjahit} readOnly isDarkMode={isDarkMode} placeholder="Nama Penjahit" icon={<User size={14} className="text-emerald-500" />} className="opacity-70 bg-slate-100/50" />
+              <div className={`p-6 md:p-7 rounded-[3rem] shadow-xl border space-y-4 transition-colors ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  <FormInput label="Penjahit (Otomatis)" value={formData.namaPenjahit} readOnly isDarkMode={isDarkMode} placeholder="Nama Penjahit" icon={<User size={14} className="text-emerald-500" />} className="opacity-70 bg-slate-100/50" compact />
 
                   <div ref={kodeBarangRef} className={`p-1 rounded-[2.5rem] border transition-all ${kodeBarangError ? 'animate-kode-error border-red-500 bg-red-50/30' : isDarkMode ? 'bg-amber-500/5 border-amber-200/50' : 'bg-amber-50/50 border-amber-200/50'}`}>
                     <FormInput
@@ -849,6 +849,7 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                       error={showDuplicateWarning || kodeBarangError}
                       icon={<FileText size={14} className={kodeBarangError ? "text-red-500" : "text-amber-500"} />}
                       className="!bg-transparent border-none ring-0 focus:ring-0"
+                      compact
                     />
                     {kodeBarangError && (
                       <div className="flex items-center gap-2 px-4 pb-3 animate-in slide-in-from-top-2 duration-300">
@@ -860,10 +861,10 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
                     )}
                   </div>
 
-                  <FormInput label="CS (Admin)" value={formData.cs} onChange={v => setFormData({ ...formData, cs: v })} isDarkMode={isDarkMode} placeholder="Nama CS" icon={<ShieldCheck size={14} />} />
-                  <FormInput label="Konsumen" value={formData.konsumen} onChange={v => setFormData({ ...formData, konsumen: v })} isDarkMode={isDarkMode} placeholder="Nama Konsumen" icon={<UserCheck size={14} />} />
-                  <FormInput label="Tgl Order" value={formData.tanggalOrder} onChange={v => setFormData({ ...formData, tanggalOrder: v })} isDarkMode={isDarkMode} icon={<Calendar size={14} />} />
-                  <FormInput label="Target Selesai" value={formData.tanggalTargetSelesai} onChange={v => setFormData({ ...formData, tanggalTargetSelesai: v })} isDarkMode={isDarkMode} placeholder="12 Jan 2026" icon={<Clock size={14} />} />
+                  <FormInput label="CS (Admin)" value={formData.cs} onChange={v => setFormData({ ...formData, cs: v })} isDarkMode={isDarkMode} placeholder="Nama CS" icon={<ShieldCheck size={14} />} compact />
+                  <FormInput label="Konsumen" value={formData.konsumen} onChange={v => setFormData({ ...formData, konsumen: v })} isDarkMode={isDarkMode} placeholder="Nama Konsumen" icon={<UserCheck size={14} />} compact />
+                  <FormInput label="Tgl Order" value={formData.tanggalOrder} onChange={v => setFormData({ ...formData, tanggalOrder: v })} isDarkMode={isDarkMode} icon={<Calendar size={14} />} compact />
+                  <FormInput label="Target Selesai" value={formData.tanggalTargetSelesai} onChange={v => setFormData({ ...formData, tanggalTargetSelesai: v })} isDarkMode={isDarkMode} placeholder="12 Jan 2026" icon={<Clock size={14} />} compact />
                 </div>
               </div>
 
@@ -1024,16 +1025,16 @@ const ScanScreen: React.FC<ScanScreenProps> = ({
   );
 };
 
-const FormInput = ({ label, type = 'text', value, onChange, required, isDarkMode, placeholder, readOnly, children, error, icon, className }: any) => (
+const FormInput = ({ label, type = 'text', value, onChange, required, isDarkMode, placeholder, readOnly, children, error, icon, className, compact }: any) => (
   <div className="flex flex-col gap-2 flex-1">
-    <label className={`text-[11px] font-black uppercase ml-2 tracking-widest transition-colors flex items-center gap-2 ${error ? 'text-red-500' : 'text-slate-400'}`}>
+    <label className={`${compact ? 'text-[10px]' : 'text-[11px]'} font-black uppercase ml-2 tracking-widest transition-colors flex items-center gap-2 ${error ? 'text-red-500' : 'text-slate-400'}`}>
       {icon} {label} {required && <span className="text-red-500">*</span>}
     </label>
     {children ? children : (
       <input
         type={type}
         readOnly={readOnly}
-        className={`border rounded-2xl px-6 py-4 text-sm font-black transition-all outline-none focus:ring-4 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')} ${className}`}
+        className={`border ${compact ? 'rounded-[1.4rem] px-5 py-3.5 text-[13px]' : 'rounded-2xl px-6 py-4 text-sm'} font-black transition-all outline-none focus:ring-4 ${error ? 'border-red-500 bg-red-50/10 focus:ring-red-500/10' : 'focus:ring-[#10b981]/5'} ${isDarkMode ? (error ? 'text-red-300' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-800') : (error ? 'text-red-600' : 'bg-slate-50 border-slate-200 text-slate-700 shadow-inner')} ${className}`}
         value={value || ''}
         onChange={e => !readOnly && onChange(e.target.value)}
         required={required}
